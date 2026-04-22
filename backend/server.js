@@ -31,7 +31,7 @@ const {
 
 const {
     parse5ElementProduct
-} = require("./services/parse5ElementProduct");
+} = require("./services/parse5elementProduct");
 
 const admin = require("firebase-admin");
 
