@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "577650820316",
+    "project_id": "goodpricestracker",
+    "storage_bucket": "goodpricestracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:577650820316:android:cb0ef5381df37d9a836019",
+        "android_client_info": {
+          "package_name": "com.example.goodpricestracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXCmLeaKvoSHGMftB0ZFBMzXcf0Jwev-U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
