@@ -1,0 +1,2055 @@
+=== СТРУКТУРА ПАПОК (только папки, содержащие нужные файлы) ===
+Корневая папка: D:\GoodPricesTracker\backend
+Скрытые папки (с точкой) пропущены.
+Исключены папки: node_modules
+============================================================
+
+backend\
+    └── services\
+
+
+=== СОДЕРЖИМОЕ ФАЙЛОВ ===
+
+Имя файла: server.js
+    const express = require("express");
+    const cors = require("cors");
+    
+    const {
+        parseOnlinerProduct
+    } = require("./services/onlinerParser");
+    
+    const {
+        parseDealProduct
+    } = require("./services/parseDealProduct");
+    
+    const {
+        parse7745Product
+    } = require("./services/parse7745Product");
+    
+    const {
+        parseElectrosilaProduct
+    } = require("./services/parseElectrosilaProduct");
+    
+    const {
+        parseShopProduct
+    } = require("./services/parseShopProduct");
+    
+    const {
+        parseEmallProduct
+    } = require("./services/parseEmallProduct");
+    
+    const {
+        parseKufarProduct
+    } = require("./services/parseKufarProduct");
+    
+    const {
+        parse5ElementProduct
+    } = require("./services/parse5elementProduct");
+    
+    const admin = require("firebase-admin");
+    
+    const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+    
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+    });
+    
+    const db = admin.firestore();
+    
+    const app = express();
+    
+    app.use(cors());
+    
+    app.get(
+        "/manualScraper",
+        async (req, res) => {
+    
+            try {
+    
+                const url =
+                    req.query.url;
+    
+                console.log(
+                    "URL:",
+                    url
+                );
+    
+                let product = null;
+    
+                if (
+                    url.includes(
+                        "onliner.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseOnlinerProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "deal.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseDealProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "7745.by"
+                    )
+                ) {
+    
+                    product =
+                        await parse7745Product(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "sila.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseElectrosilaProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "shop.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseShopProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "emall.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseEmallProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "kufar.by"
+                    )
+                ) {
+    
+                    product =
+                        await parseKufarProduct(
+                            url
+                        );
+    
+                }
+    
+                else if (
+                    url.includes(
+                        "5element.by"
+                    )
+                ) {
+    
+                    product =
+                        await parse5ElementProduct(
+                            url
+                        );
+    
+                }
+    
+                if (!product) {
+    
+                    return res
+                        .status(400)
+                        .send(
+                            "Unsupported site"
+                        );
+    
+                }
+    
+                await db
+                    .collection(
+                        "products"
+                    )
+                    .add({
+    
+                        ...product,
+    
+                        createdAt:
+                            new Date(),
+    
+                        lastUpdated:
+                            new Date()
+    
+                    });
+    
+                res.send(product);
+    
+            }
+    
+            catch (error) {
+    
+                console.error(error);
+    
+                res
+                    .status(500)
+                    .send("Error");
+    
+            }
+    
+        }
+    
+    );
+    
+    const PORT =
+        process.env.PORT || 3000;
+    
+    app.listen(
+        PORT,
+        () => {
+    
+            console.log(
+                "Server started"
+            );
+    
+        }
+    );
+
+Имя файла: services\onlinerParser.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parseOnlinerProduct(
+        url
+    ) {
+    
+        console.log(
+            "Parsing Onliner:",
+            url
+        );
+    
+        const response =
+            await axios.get(
+                url,
+                {
+                    headers: {
+                        "User-Agent":
+                            "Mozilla/5.0"
+                    }
+                }
+            );
+    
+        const $ =
+            cheerio.load(
+                response.data
+            );
+    
+        const title =
+            $("h1")
+                .first()
+                .text()
+                .trim();
+    
+        let price = null;
+        let image = null;
+    
+        $(
+            "script[type='application/ld+json']"
+        ).each(
+            (index, element) => {
+    
+                try {
+    
+                    const jsonText =
+                        $(element).html();
+    
+                    if (!jsonText)
+                        return;
+    
+                    let data =
+                        JSON.parse(
+                            jsonText
+                        );
+    
+                    if (
+                        Array.isArray(
+                            data
+                        )
+                    ) {
+    
+                        data.forEach(
+                            (item) => {
+    
+                                if (
+                                    item["@type"] ===
+                                    "Product"
+                                ) {
+    
+                                    if (
+                                        item.offers &&
+                                        item
+                                            .offers
+                                            .lowPrice
+                                    ) {
+    
+                                        price =
+                                            parseFloat(
+                                                item
+                                                    .offers
+                                                    .lowPrice
+                                            );
+    
+                                    }
+    
+                                    if (
+                                        item.image
+                                    ) {
+    
+                                        if (
+                                            Array.isArray(
+                                                item.image
+                                            )
+                                        ) {
+    
+                                            const img =
+                                                item.image[0];
+    
+                                            if (
+                                                typeof img ===
+                                                "object"
+                                            ) {
+    
+                                                image =
+                                                    img.url;
+    
+                                            }
+                                            else {
+    
+                                                image =
+                                                    img;
+    
+                                            }
+    
+                                        }
+    
+                                    }
+    
+                                }
+    
+                            }
+                        );
+    
+                    }
+    
+                }
+                catch (e) {
+                }
+    
+            }
+        );
+    
+        return {
+    
+            title,
+            price,
+            image,
+            link: url,
+            source:
+                "onliner"
+    
+        };
+    
+    }
+    
+    module.exports = {
+        parseOnlinerProduct
+    };
+
+Имя файла: services\parse21vekProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    function sleep(ms) {
+        return new Promise(resolve =>
+            setTimeout(resolve, ms)
+        );
+    }
+    
+    function extractPrice(value) {
+    
+        if (!value) return null;
+    
+        const cleaned =
+            String(value)
+                .replace(/\s/g, "")
+                .replace(",", ".");
+    
+        const match =
+            cleaned.match(/\d+(\.\d+)?/);
+    
+        return match
+            ? parseFloat(match[0])
+            : null;
+    
+    }
+    
+    async function parse21vekProduct(url) {
+    
+        console.log(
+            "Parsing 21vek:",
+            url
+        );
+    
+        try {
+    
+            await sleep(1000);
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        timeout: 15000,
+    
+                        headers: {
+    
+                            "User-Agent":
+                                "Mozilla/5.0",
+    
+                            "Accept":
+                                "text/html",
+    
+                            "Accept-Language":
+                                "ru-RU,ru;q=0.9"
+    
+                        }
+    
+                    }
+                );
+    
+            const html =
+                response.data;
+    
+            const $ =
+                cheerio.load(html);
+    
+            // =====================
+            // TITLE
+            // =====================
+    
+            let title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            if (!title) {
+    
+                title =
+                    $("meta[property='og:title']")
+                        .attr("content");
+    
+            }
+    
+            // =====================
+            // IMAGE
+            // =====================
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr("content");
+    
+            // =====================
+            // PRICE (JSON-LD)
+            // =====================
+    
+            let price = null;
+    
+            const scripts =
+                $("script[type='application/ld+json']");
+    
+            scripts.each((i, el) => {
+    
+                try {
+    
+                    const json =
+                        JSON.parse(
+                            $(el).html()
+                        );
+    
+                    if (
+                        json.offers &&
+                        json.offers.price
+                    ) {
+    
+                        price =
+                            extractPrice(
+                                json.offers.price
+                            );
+    
+                    }
+    
+                }
+                catch {}
+    
+            });
+    
+            // =====================
+            // FALLBACK: search raw JSON
+            // =====================
+    
+            if (!price) {
+    
+                const match =
+                    html.match(
+                        /"price"\s*:\s*"?([\d.,]+)"?/
+                    );
+    
+                if (match) {
+    
+                    price =
+                        extractPrice(
+                            match[1]
+                        );
+    
+                }
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            if (!title || !price) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "21vek"
+    
+            };
+    
+        }
+        catch (error) {
+    
+            console.error(
+                "21vek parse error:",
+                error.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "21vek"
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parse21vekProduct
+    };
+
+Имя файла: services\parse5elementProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parse5elementProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing 5element:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim() ||
+    
+                $("meta[property='og:title']")
+                    .attr("content");
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE
+            // ----------------
+    
+            let price =
+                null;
+    
+            // основной источник (schema.org)
+    
+            const metaPrice =
+                $("meta[itemprop='price']")
+                    .attr("content");
+    
+            if (metaPrice) {
+    
+                price =
+                    parseFloat(
+                        metaPrice
+                    );
+    
+                console.log(
+                    "Price from meta:",
+                    price
+                );
+    
+            }
+    
+            // fallback — HTML
+    
+            if (!price) {
+    
+                const priceText =
+                    $(
+                        ".price, .product-price, [class*='price']"
+                    )
+                        .first()
+                        .text()
+                        .replace(/\s/g, "")
+                        .replace(",", ".")
+                        .match(/[\d.]+/);
+    
+                if (priceText) {
+    
+                    price =
+                        parseFloat(
+                            priceText[0]
+                        );
+    
+                    console.log(
+                        "Price from HTML:",
+                        price
+                    );
+    
+                }
+    
+            }
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr("content");
+    
+            if (image) {
+    
+                if (
+                    image.startsWith("//")
+                ) {
+    
+                    image =
+                        "https:" +
+                        image;
+    
+                }
+    
+                else if (
+                    image.startsWith("/")
+                ) {
+    
+                    image =
+                        "https://5element.by" +
+                        image;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            // ----------------
+    
+            if (
+                !title ||
+                !price
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "5element",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "5element parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "5element",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parse5elementProduct
+    };
+
+Имя файла: services\parse7745Product.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parse7745Product(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing 7745.by:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE
+            // ----------------
+    
+            let price =
+                null;
+    
+            const metaPrice =
+                $("meta[itemprop='price']")
+                    .attr(
+                        "content"
+                    );
+    
+            console.log(
+                "Meta price:",
+                metaPrice
+            );
+    
+            if (
+                metaPrice
+            ) {
+    
+                price =
+                    parseFloat(
+                        metaPrice
+                    );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr(
+                        "content"
+                    );
+    
+            if (
+                image
+            ) {
+    
+                if (
+                    image.startsWith("//")
+                ) {
+    
+                    image =
+                        "https:" +
+                        image;
+    
+                }
+    
+                else if (
+                    image.startsWith("/")
+                ) {
+    
+                    image =
+                        "https://7745.by" +
+                        image;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            if (
+                !title
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "7745",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "7745 parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "7745",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parse7745Product
+    };
+
+Имя файла: services\parseDealProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parseDealProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing Deal.by:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE
+            // ----------------
+    
+            let price =
+                null;
+    
+            const priceAttr =
+                $(
+                    "[data-qaid='product_price']"
+                )
+                    .attr(
+                        "data-qaprice"
+                    );
+    
+            console.log(
+                "Raw price:",
+                priceAttr
+            );
+    
+            if (
+                priceAttr
+            ) {
+    
+                price =
+                    parseFloat(
+                        priceAttr
+                    );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr(
+                        "content"
+                    );
+    
+            if (
+                image &&
+                image.startsWith("//")
+            ) {
+    
+                image =
+                    "https:" +
+                    image;
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            if (
+                !title
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "deal",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "Deal parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "deal",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parseDealProduct
+    };
+
+Имя файла: services\parseElectrosilaProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    const iconv = require("iconv-lite");
+    
+    async function parseElectrosilaProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing Electrosila:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+    
+                        responseType:
+                            "arraybuffer",
+    
+                        timeout: 15000,
+                    }
+                );
+    
+            // ----------------
+            // FIX ENCODING
+            // ----------------
+    
+            const data =
+                iconv.decode(
+                    response.data,
+                    "win1251"
+                );
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE
+            // ----------------
+    
+            let price =
+                null;
+    
+            let priceText =
+                $(".price b")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Raw price:",
+                priceText
+            );
+    
+            if (
+                priceText
+            ) {
+    
+                priceText =
+                    priceText
+                        .replace(
+                            /[^0-9.,]/g,
+                            ""
+                        )
+                        .replace(
+                            ",",
+                            "."
+                        );
+    
+                price =
+                    parseFloat(
+                        priceText
+                    );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr(
+                        "content"
+                    );
+    
+            if (image) {
+    
+                if (
+                    image.startsWith("//")
+                ) {
+    
+                    image =
+                        "https:" +
+                        image;
+    
+                }
+    
+                else if (
+                    image.startsWith("/")
+                ) {
+    
+                    image =
+                        "https://sila.by" +
+                        image;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            if (!title) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "electrosila",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "Electrosila parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "electrosila",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parseElectrosilaProduct
+    };
+
+Имя файла: services\parseEmallProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parseEmallProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing Emall:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE
+            // ----------------
+    
+            let price =
+                null;
+    
+            // основной источник
+    
+            const priceText =
+                $("span[class*='price_main']")
+                    .first()
+                    .text()
+                    .replace(/\s/g, "")
+                    .replace(",", ".")
+                    .match(/[\d.]+/);
+    
+            if (priceText) {
+    
+                price =
+                    parseFloat(
+                        priceText[0]
+                    );
+    
+                console.log(
+                    "Price from main:",
+                    price
+                );
+    
+            }
+    
+            // fallback — meta
+    
+            if (!price) {
+    
+                const metaPrice =
+                    $("meta[itemprop='price']")
+                        .attr("content");
+    
+                if (metaPrice) {
+    
+                    price =
+                        parseFloat(
+                            metaPrice
+                        );
+    
+                    console.log(
+                        "Price from meta:",
+                        price
+                    );
+    
+                }
+    
+            }
+    
+            // fallback — JSON
+    
+            if (!price) {
+    
+                const scripts =
+                    $("script")
+                        .toArray();
+    
+                for (const script of scripts) {
+    
+                    const content =
+                        $(script).html();
+    
+                    if (
+                        content &&
+                        content.includes(
+                            "price"
+                        )
+                    ) {
+    
+                        const match =
+                            content.match(
+                                /"price"\s*:\s*"?([\d.]+)"?/
+                            );
+    
+                        if (match) {
+    
+                            price =
+                                parseFloat(
+                                    match[1]
+                                );
+    
+                            console.log(
+                                "Price from JSON:",
+                                price
+                            );
+    
+                            break;
+    
+                        }
+    
+                    }
+    
+                }
+    
+            }
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr(
+                        "content"
+                    );
+    
+            if (image) {
+    
+                if (
+                    image.startsWith("//")
+                ) {
+    
+                    image =
+                        "https:" +
+                        image;
+    
+                }
+    
+                else if (
+                    image.startsWith("/")
+                ) {
+    
+                    image =
+                        "https://emall.by" +
+                        image;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            // ----------------
+    
+            if (
+                !title ||
+                !price
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "emall",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "Emall parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "emall",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parseEmallProduct
+    };
+
+Имя файла: services\parseKufarProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parseKufarProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing Kufar:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE (schema.org)
+            // ----------------
+    
+            let price =
+                null;
+    
+            let priceType =
+                "number";
+    
+            const metaPrice =
+                $("meta[itemprop='price']")
+                    .attr(
+                        "content"
+                    );
+    
+            console.log(
+                "Meta price:",
+                metaPrice
+            );
+    
+            if (
+                metaPrice !== undefined
+            ) {
+    
+                price =
+                    parseFloat(
+                        metaPrice
+                    );
+    
+            }
+    
+            // ----------------
+            // DETECT TYPE
+            // ----------------
+    
+            const priceText =
+                $("span[class*='styles_main']")
+                    .first()
+                    .text()
+                    .trim()
+                    .toLowerCase();
+    
+            console.log(
+                "Price text:",
+                priceText
+            );
+    
+            if (
+                price === 0
+            ) {
+    
+                if (
+                    priceText.includes(
+                        "договор"
+                    )
+                ) {
+    
+                    priceType =
+                        "negotiable";
+    
+                    price =
+                        null;
+    
+                }
+    
+                else if (
+                    priceText.includes(
+                        "бесплат"
+                    )
+                ) {
+    
+                    priceType =
+                        "free";
+    
+                    price =
+                        0;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            console.log(
+                "Price type:",
+                priceType
+            );
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            let image =
+                $("meta[property='og:image']")
+                    .attr(
+                        "content"
+                    );
+    
+            if (
+                image &&
+                image.startsWith("//")
+            ) {
+    
+                image =
+                    "https:" +
+                    image;
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            if (
+                !title
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            return {
+    
+                title,
+                price,
+                priceType,
+                image,
+                link: url,
+                source: "kufar",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "Kufar parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                priceType: null,
+                image: null,
+                link: url,
+                source: "kufar",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parseKufarProduct
+    };
+
+Имя файла: services\parseShopProduct.js
+    const axios = require("axios");
+    const cheerio = require("cheerio");
+    
+    async function parseShopProduct(url) {
+    
+        try {
+    
+            console.log(
+                "Parsing Shop.by:",
+                url
+            );
+    
+            const response =
+                await axios.get(
+                    url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Accept":
+                                "text/html",
+                        },
+                        timeout: 15000,
+                    }
+                );
+    
+            const data =
+                response.data;
+    
+            console.log(
+                "HTML length:",
+                data.length
+            );
+    
+            const $ =
+                cheerio.load(data);
+    
+            // ----------------
+            // TITLE
+            // ----------------
+    
+            const title =
+                $("h1")
+                    .first()
+                    .text()
+                    .trim();
+    
+            console.log(
+                "Title:",
+                title
+            );
+    
+            // ----------------
+            // PRICE FROM HTML
+            // ----------------
+    
+            // PRICE (schema.org)
+    
+            let price = null;
+    
+    // основной источник
+    
+            const lowPrice =
+                $("meta[itemprop='lowPrice']")
+                    .attr("content");
+    
+            if (lowPrice) {
+    
+                price =
+                    Math.round(
+                        parseFloat(lowPrice) * 100
+                    ) / 100;
+    
+                console.log(
+                    "Price from lowPrice:",
+                    price
+                );
+    
+            }
+    
+    // fallback (если вдруг нет)
+    
+            if (!price) {
+    
+                const priceText =
+                    $(
+                        ".price__value, .offers-list__item-price"
+                    )
+                        .first()
+                        .text()
+                        .replace(/\s/g, "")
+                        .replace(",", ".")
+                        .match(/[\d.]+/);
+    
+                if (priceText) {
+    
+                    price =
+                        parseFloat(
+                            priceText[0]
+                        );
+    
+                    console.log(
+                        "Price from HTML:",
+                        price
+                    );
+    
+                }
+    
+            }
+    
+            // ----------------
+            // JSON FALLBACK
+            // ----------------
+    
+            if (!price) {
+    
+                const scripts =
+                    $("script")
+                        .toArray();
+    
+                for (const script of scripts) {
+    
+                    const content =
+                        $(script).html();
+    
+                    if (
+                        content &&
+                        content.includes(
+                            "price"
+                        )
+                    ) {
+    
+                        const match =
+                            content.match(
+                                /"price"\s*:\s*"?([\d.]+)"?/
+                            );
+    
+                        if (match) {
+    
+                            price =
+                                parseFloat(
+                                    match[1]
+                                );
+    
+                            console.log(
+                                "Price from JSON:",
+                                price
+                            );
+    
+                            break;
+    
+                        }
+    
+                    }
+    
+                }
+    
+            }
+    
+            // ----------------
+            // IMAGE
+            // ----------------
+    
+            // ----------------
+    // IMAGE
+    // ----------------
+    
+            let image =
+                $(
+                    "meta[property='og:image']"
+                ).attr(
+                    "content"
+                );
+    
+    // делаем абсолютный URL
+    
+            if (image) {
+    
+                if (
+                    image.startsWith("//")
+                ) {
+    
+                    image =
+                        "https:" +
+                        image;
+    
+                }
+    
+                else if (
+                    image.startsWith("/")
+                ) {
+    
+                    image =
+                        "https://shop.by" +
+                        image;
+    
+                }
+    
+            }
+    
+            console.log(
+                "Image:",
+                image
+            );
+    
+            // ----------------
+    
+            if (
+                !title ||
+                !price
+            ) {
+    
+                throw new Error(
+                    "Failed to parse product"
+                );
+    
+            }
+    
+            console.log(
+                "Parsed price:",
+                price
+            );
+    
+            return {
+    
+                title,
+                price,
+                image,
+                link: url,
+                source: "shop",
+    
+            };
+    
+        }
+    
+        catch (err) {
+    
+            console.log(
+                "Shop.by parse error:",
+                err.message
+            );
+    
+            return {
+    
+                title: null,
+                price: null,
+                image: null,
+                link: url,
+                source: "shop",
+    
+            };
+    
+        }
+    
+    }
+    
+    module.exports = {
+        parseShopProduct
+    };
+

@@ -2,6 +2,10 @@ const express = require("express");
 const cors = require("cors");
 
 const {
+    parse21vekProduct
+} = require("./services/parse21vekProduct");
+
+const {
     parseOnlinerProduct
 } = require("./services/onlinerParser");
 
@@ -104,6 +108,19 @@ app.get(
 
             else if (
                 url.includes(
+                    "21vek.by"
+                )
+            ) {
+
+                product =
+                    await parse21vekProduct(
+                        url
+                    );
+
+            }
+
+            else if (
+                url.includes(
                     "sila.by"
                 )
             ) {
@@ -161,7 +178,7 @@ app.get(
             ) {
 
                 product =
-                    await parse5ElementProduct(
+                    await parse5elementProduct(
                         url
                     );
 
