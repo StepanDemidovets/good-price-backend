@@ -220,7 +220,7 @@ app.get(
 
             res
                 .status(500)
-                .send("Error");
+                .send(error.message);
 
         }
 
