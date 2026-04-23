@@ -186,10 +186,9 @@ async function parseEmallProduct(url) {
 
         }
 
-        console.log(
-            "Image:",
-            image
-        );
+        console.log("Title:", title);
+        console.log("Price:", price);
+        console.log("Image:", image);
 
         // ----------------
 
