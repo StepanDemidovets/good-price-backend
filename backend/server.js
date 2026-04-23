@@ -47,6 +47,10 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+db.settings({
+    ignoreUndefinedProperties: true
+});
+
 const app = express();
 
 app.use(cors());
