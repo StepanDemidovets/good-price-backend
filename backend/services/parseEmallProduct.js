@@ -15,12 +15,25 @@ async function parseEmallProduct(url) {
                 url,
                 {
                     headers: {
+
                         "User-Agent":
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+
                         "Accept":
-                            "text/html",
+                            "text/html,application/xhtml+xml,application/xml;q=0.9",
+
+                        "Accept-Language":
+                            "ru-RU,ru;q=0.9",
+
+                        "Referer":
+                            "https://emall.by/",
+
+                        "Connection":
+                            "keep-alive"
+
                     },
-                    timeout: 15000,
+
+                    timeout: 15000
                 }
             );
 

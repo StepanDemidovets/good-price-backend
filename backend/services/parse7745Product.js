@@ -16,13 +16,28 @@ async function parse7745Product(url) {
                 {
                     headers: {
                         "User-Agent":
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+
                         "Accept":
-                            "text/html",
+                            "text/html,application/xhtml+xml,application/xml;q=0.9",
+
+                        "Accept-Language":
+                            "ru-RU,ru;q=0.9",
+
+                        "Referer":
+                            "https://7745.by/"
                     },
+
                     timeout: 15000,
+
+                    validateStatus: () => true
                 }
             );
+
+        console.log(
+            "STATUS:",
+            response.status
+        );
 
         const data =
             response.data;
