@@ -1,6 +1,22 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 
+const { wrapper } =
+    require("axios-cookiejar-support");
+
+const tough =
+    require("tough-cookie");
+
+const jar =
+    new tough.CookieJar();
+
+const client =
+    wrapper(
+        axios.create({
+            jar
+        })
+    );
+
 async function parseEmallProduct(url) {
 
     try {
@@ -11,7 +27,7 @@ async function parseEmallProduct(url) {
         );
 
         const response =
-            await axios.get(
+            await client.get(
                 url,
                 {
                     headers: {
@@ -26,14 +42,18 @@ async function parseEmallProduct(url) {
                             "ru-RU,ru;q=0.9",
 
                         "Referer":
-                            "https://emall.by/",
+                            "https://7745.by/",
 
                         "Connection":
                             "keep-alive"
 
                     },
 
-                    timeout: 15000
+                    timeout: 15000,
+
+                    maxRedirects: 5,
+
+                    validateStatus: () => true
                 }
             );
 

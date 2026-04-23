@@ -1,6 +1,22 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 
+const { wrapper } =
+    require("axios-cookiejar-support");
+
+const tough =
+    require("tough-cookie");
+
+const jar =
+    new tough.CookieJar();
+
+const client =
+    wrapper(
+        axios.create({
+            jar
+        })
+    );
+
 async function parse7745Product(url) {
 
     try {
@@ -11,10 +27,11 @@ async function parse7745Product(url) {
         );
 
         const response =
-            await axios.get(
+            await client.get(
                 url,
                 {
                     headers: {
+
                         "User-Agent":
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
 
@@ -25,10 +42,16 @@ async function parse7745Product(url) {
                             "ru-RU,ru;q=0.9",
 
                         "Referer":
-                            "https://7745.by/"
+                            "https://7745.by/",
+
+                        "Connection":
+                            "keep-alive"
+
                     },
 
                     timeout: 15000,
+
+                    maxRedirects: 5,
 
                     validateStatus: () => true
                 }
