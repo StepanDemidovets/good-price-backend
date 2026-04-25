@@ -54,6 +54,7 @@ db.settings({
 const app = express();
 
 app.use(cors());
+app.use(express.json());
 
 app.get("/", (req, res) => {
     res.send("Backend is running");
@@ -239,6 +240,105 @@ app.get(
     }
 
 );
+
+app.get("/products", async (req, res) => {
+
+    try {
+
+        const snapshot =
+            await db
+                .collection("products")
+                .orderBy("createdAt", "desc")
+                .get();
+
+        const products =
+            snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+        res.send(products);
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.delete("/products/:id", async (req, res) => {
+
+    try {
+
+        const id =
+            req.params.id;
+
+        await db
+            .collection("products")
+            .doc(id)
+            .delete();
+
+        res.send("Deleted");
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.put("/products/:id", async (req, res) => {
+
+    try {
+
+        const id =
+            req.params.id;
+
+        const newPrice =
+            req.body.price;
+
+        await db
+            .collection("products")
+            .doc(id)
+            .update({
+
+                price:
+                newPrice,
+
+                lastUpdated:
+                    new Date()
+
+            });
+
+        res.send("Updated");
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
 
 const PORT =
     process.env.PORT || 3000;
