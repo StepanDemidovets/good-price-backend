@@ -55,6 +55,10 @@ const app = express();
 
 app.use(cors());
 
+app.get("/", (req, res) => {
+    res.send("Backend is running");
+});
+
 app.get(
     "/manualScraper",
     async (req, res) => {
@@ -198,21 +202,25 @@ app.get(
 
             }
 
-            await db
-                .collection(
-                    "products"
-                )
-                .add({
+            if (!product.title || !product.price) {
+                console.log("Product invalid, not saving");
+                return res.send(product);
+            }
 
-                    ...product,
 
-                    createdAt:
-                        new Date(),
 
-                    lastUpdated:
-                        new Date()
+            await db.collection("products").add({
+                title: product.title || null,
+                price: product.price || null,
+                image: product.image || null,
+                link: product.link,
+                source: product.source,
 
-                });
+                status: product.title ? "ok" : "error",
+
+                createdAt: new Date(),
+                lastUpdated: new Date()
+            });
 
             res.send(product);
 
