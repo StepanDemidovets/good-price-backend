@@ -299,6 +299,7 @@ app.delete("/products/:id", async (req, res) => {
 
     }
 
+
 });
 
 app.put("/products/:id", async (req, res) => {
@@ -342,6 +343,267 @@ app.put("/products/:id", async (req, res) => {
 
 const PORT =
     process.env.PORT || 3000;
+
+app.get("/deleteProduct", async (req, res) => {
+
+    try {
+
+        const id =
+            req.query.id;
+
+        if (!id) {
+            return res.send("No id provided");
+        }
+
+        await db
+            .collection("products")
+            .doc(id)
+            .delete();
+
+        res.send("Product deleted");
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.get("/updateProduct", async (req, res) => {
+
+    try {
+
+        const id =
+            req.query.id;
+
+        if (!id) {
+            return res.send("No id provided");
+        }
+
+        // получить товар из базы
+
+        const docRef =
+            db
+                .collection("products")
+                .doc(id);
+
+        const snapshot =
+            await docRef.get();
+
+        if (!snapshot.exists) {
+            return res.send("Product not found");
+        }
+
+        const product =
+            snapshot.data();
+
+        const url =
+            product.link;
+
+        console.log(
+            "Updating product:",
+            url
+        );
+
+        let updatedProduct =
+            null;
+
+        // определить сайт
+
+        if (url.includes("onliner.by")) {
+
+            updatedProduct =
+                await parseOnlinerProduct(url);
+
+        }
+
+        else if (url.includes("deal.by")) {
+
+            updatedProduct =
+                await parseDealProduct(url);
+
+        }
+
+        else if (url.includes("7745.by")) {
+
+            updatedProduct =
+                await parse7745Product(url);
+
+        }
+
+        else if (url.includes("21vek.by")) {
+
+            updatedProduct =
+                await parse21vekProduct(url);
+
+        }
+
+        else if (url.includes("sila.by")) {
+
+            updatedProduct =
+                await parseElectrosilaProduct(url);
+
+        }
+
+        else if (url.includes("shop.by")) {
+
+            updatedProduct =
+                await parseShopProduct(url);
+
+        }
+
+        else if (url.includes("emall.by")) {
+
+            updatedProduct =
+                await parseEmallProduct(url);
+
+        }
+
+        else if (url.includes("kufar.by")) {
+
+            updatedProduct =
+                await parseKufarProduct(url);
+
+        }
+
+        else if (url.includes("5element.by")) {
+
+            updatedProduct =
+                await parse5elementProduct(url);
+
+        }
+
+        if (
+            !updatedProduct ||
+            !updatedProduct.price
+        ) {
+
+            return res.send(
+                "Failed to update product"
+            );
+
+        }
+
+        // обновить документ
+
+        await docRef.update({
+
+            title:
+            updatedProduct.title,
+
+            price:
+            updatedProduct.price,
+
+            image:
+            updatedProduct.image,
+
+            lastUpdated:
+                new Date()
+
+        });
+
+        res.send(
+            "Product updated"
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.get("/updateAllProducts", async (req, res) => {
+
+    try {
+
+        const snapshot =
+            await db
+                .collection("products")
+                .get();
+
+        for (const doc of snapshot.docs) {
+
+            const product =
+                doc.data();
+
+            console.log(
+                "Updating:",
+                product.link
+            );
+
+            let updatedProduct =
+                null;
+
+            const url =
+                product.link;
+
+            if (url.includes("onliner.by")) {
+                updatedProduct =
+                    await parseOnlinerProduct(url);
+            }
+
+            else if (url.includes("5element.by")) {
+                updatedProduct =
+                    await parse5elementProduct(url);
+            }
+
+            else if (url.includes("21vek.by")) {
+                updatedProduct =
+                    await parse21vekProduct(url);
+            }
+
+            if (
+                updatedProduct &&
+                updatedProduct.price
+            ) {
+
+                await db
+                    .collection("products")
+                    .doc(doc.id)
+                    .update({
+
+                        price:
+                        updatedProduct.price,
+
+                        lastUpdated:
+                            new Date()
+
+                    });
+
+            }
+
+        }
+
+        res.send("All products updated");
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
 
 app.listen(
     PORT,
