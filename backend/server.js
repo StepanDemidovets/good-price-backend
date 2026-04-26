@@ -39,10 +39,12 @@ const {
 
 const admin = require("firebase-admin");
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+const serviceAccount =
+    JSON.parse(process.env.FIREBASE_KEY);
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential:
+        admin.credential.cert(serviceAccount),
 });
 
 const db = admin.firestore();
@@ -56,190 +58,149 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+/* ========================================= */
+/* Универсальный парсер по URL */
+/* ========================================= */
+
+async function parseProductByUrl(url) {
+
+    if (url.includes("onliner.by")) {
+        return await parseOnlinerProduct(url);
+    }
+
+    else if (url.includes("deal.by")) {
+        return await parseDealProduct(url);
+    }
+
+    else if (url.includes("7745.by")) {
+        return await parse7745Product(url);
+    }
+
+    else if (url.includes("21vek.by")) {
+        return await parse21vekProduct(url);
+    }
+
+    else if (url.includes("sila.by")) {
+        return await parseElectrosilaProduct(url);
+    }
+
+    else if (url.includes("shop.by")) {
+        return await parseShopProduct(url);
+    }
+
+    else if (url.includes("emall.by")) {
+        return await parseEmallProduct(url);
+    }
+
+    else if (url.includes("kufar.by")) {
+        return await parseKufarProduct(url);
+    }
+
+    else if (url.includes("5element.by")) {
+        return await parse5elementProduct(url);
+    }
+
+    return null;
+
+}
+
+/* ========================================= */
+/* Health check */
+/* ========================================= */
+
 app.get("/", (req, res) => {
     res.send("Backend is running");
 });
 
-app.get(
-    "/manualScraper",
-    async (req, res) => {
+/* ========================================= */
+/* Добавить товар */
+/* ========================================= */
 
-        try {
+app.get("/manualScraper", async (req, res) => {
 
-            const url =
-                req.query.url;
+    try {
+
+        const url =
+            req.query.url;
+
+        console.log(
+            "URL:",
+            url
+        );
+
+        const product =
+            await parseProductByUrl(url);
+
+        if (!product) {
+
+            return res
+                .status(400)
+                .send("Unsupported site");
+
+        }
+
+        if (
+            !product.title ||
+            !product.price
+        ) {
 
             console.log(
-                "URL:",
-                url
+                "Product invalid, not saving"
             );
 
-            let product = null;
+            return res.send(product);
 
-            if (
-                url.includes(
-                    "onliner.by"
-                )
-            ) {
+        }
 
-                product =
-                    await parseOnlinerProduct(
-                        url
-                    );
+        await db
+            .collection("products")
+            .add({
 
-            }
+                title:
+                    product.title || null,
 
-            else if (
-                url.includes(
-                    "deal.by"
-                )
-            ) {
+                price:
+                    product.price || null,
 
-                product =
-                    await parseDealProduct(
-                        url
-                    );
+                image:
+                    product.image || null,
 
-            }
+                link:
+                product.link,
 
-            else if (
-                url.includes(
-                    "7745.by"
-                )
-            ) {
+                source:
+                product.source,
 
-                product =
-                    await parse7745Product(
-                        url
-                    );
+                status:
+                    "ok",
 
-            }
+                createdAt:
+                    new Date(),
 
-            else if (
-                url.includes(
-                    "21vek.by"
-                )
-            ) {
+                lastUpdated:
+                    new Date()
 
-                product =
-                    await parse21vekProduct(
-                        url
-                    );
-
-            }
-
-            else if (
-                url.includes(
-                    "sila.by"
-                )
-            ) {
-
-                product =
-                    await parseElectrosilaProduct(
-                        url
-                    );
-
-            }
-
-            else if (
-                url.includes(
-                    "shop.by"
-                )
-            ) {
-
-                product =
-                    await parseShopProduct(
-                        url
-                    );
-
-            }
-
-            else if (
-                url.includes(
-                    "emall.by"
-                )
-            ) {
-
-                product =
-                    await parseEmallProduct(
-                        url
-                    );
-
-            }
-
-            else if (
-                url.includes(
-                    "kufar.by"
-                )
-            ) {
-
-                product =
-                    await parseKufarProduct(
-                        url
-                    );
-
-            }
-
-            else if (
-                url.includes(
-                    "5element.by"
-                )
-            ) {
-
-                product =
-                    await parse5elementProduct(
-                        url
-                    );
-
-            }
-
-            if (!product) {
-
-                return res
-                    .status(400)
-                    .send(
-                        "Unsupported site"
-                    );
-
-            }
-
-            if (!product.title || !product.price) {
-                console.log("Product invalid, not saving");
-                return res.send(product);
-            }
-
-
-
-            await db.collection("products").add({
-                title: product.title || null,
-                price: product.price || null,
-                image: product.image || null,
-                link: product.link,
-                source: product.source,
-
-                status: product.title ? "ok" : "error",
-
-                createdAt: new Date(),
-                lastUpdated: new Date()
             });
 
-            res.send(product);
-
-        }
-
-        catch (error) {
-
-            console.error(error);
-
-            res
-                .status(500)
-                .send(error.message);
-
-        }
+        res.send(product);
 
     }
 
-);
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+/* ========================================= */
+/* Получить все товары */
+/* ========================================= */
 
 app.get("/products", async (req, res) => {
 
@@ -248,13 +209,20 @@ app.get("/products", async (req, res) => {
         const snapshot =
             await db
                 .collection("products")
-                .orderBy("createdAt", "desc")
+                .orderBy(
+                    "createdAt",
+                    "desc"
+                )
                 .get();
 
         const products =
             snapshot.docs.map(doc => ({
-                id: doc.id,
+
+                id:
+                doc.id,
+
                 ...doc.data()
+
             }));
 
         res.send(products);
@@ -273,76 +241,9 @@ app.get("/products", async (req, res) => {
 
 });
 
-app.delete("/products/:id", async (req, res) => {
-
-    try {
-
-        const id =
-            req.params.id;
-
-        await db
-            .collection("products")
-            .doc(id)
-            .delete();
-
-        res.send("Deleted");
-
-    }
-
-    catch (error) {
-
-        console.error(error);
-
-        res
-            .status(500)
-            .send(error.message);
-
-    }
-
-
-});
-
-app.put("/products/:id", async (req, res) => {
-
-    try {
-
-        const id =
-            req.params.id;
-
-        const newPrice =
-            req.body.price;
-
-        await db
-            .collection("products")
-            .doc(id)
-            .update({
-
-                price:
-                newPrice,
-
-                lastUpdated:
-                    new Date()
-
-            });
-
-        res.send("Updated");
-
-    }
-
-    catch (error) {
-
-        console.error(error);
-
-        res
-            .status(500)
-            .send(error.message);
-
-    }
-
-});
-
-const PORT =
-    process.env.PORT || 3000;
+/* ========================================= */
+/* Удалить товар */
+/* ========================================= */
 
 app.get("/deleteProduct", async (req, res) => {
 
@@ -352,7 +253,9 @@ app.get("/deleteProduct", async (req, res) => {
             req.query.id;
 
         if (!id) {
-            return res.send("No id provided");
+            return res.send(
+                "No id provided"
+            );
         }
 
         await db
@@ -360,7 +263,9 @@ app.get("/deleteProduct", async (req, res) => {
             .doc(id)
             .delete();
 
-        res.send("Product deleted");
+        res.send(
+            "Product deleted"
+        );
 
     }
 
@@ -376,6 +281,10 @@ app.get("/deleteProduct", async (req, res) => {
 
 });
 
+/* ========================================= */
+/* Обновить один товар */
+/* ========================================= */
+
 app.get("/updateProduct", async (req, res) => {
 
     try {
@@ -384,10 +293,10 @@ app.get("/updateProduct", async (req, res) => {
             req.query.id;
 
         if (!id) {
-            return res.send("No id provided");
+            return res.send(
+                "No id provided"
+            );
         }
-
-        // получить товар из базы
 
         const docRef =
             db
@@ -398,7 +307,9 @@ app.get("/updateProduct", async (req, res) => {
             await docRef.get();
 
         if (!snapshot.exists) {
-            return res.send("Product not found");
+            return res.send(
+                "Product not found"
+            );
         }
 
         const product =
@@ -412,86 +323,23 @@ app.get("/updateProduct", async (req, res) => {
             url
         );
 
-        let updatedProduct =
-            null;
-
-        // определить сайт
-
-        if (url.includes("onliner.by")) {
-
-            updatedProduct =
-                await parseOnlinerProduct(url);
-
-        }
-
-        else if (url.includes("deal.by")) {
-
-            updatedProduct =
-                await parseDealProduct(url);
-
-        }
-
-        else if (url.includes("7745.by")) {
-
-            updatedProduct =
-                await parse7745Product(url);
-
-        }
-
-        else if (url.includes("21vek.by")) {
-
-            updatedProduct =
-                await parse21vekProduct(url);
-
-        }
-
-        else if (url.includes("sila.by")) {
-
-            updatedProduct =
-                await parseElectrosilaProduct(url);
-
-        }
-
-        else if (url.includes("shop.by")) {
-
-            updatedProduct =
-                await parseShopProduct(url);
-
-        }
-
-        else if (url.includes("emall.by")) {
-
-            updatedProduct =
-                await parseEmallProduct(url);
-
-        }
-
-        else if (url.includes("kufar.by")) {
-
-            updatedProduct =
-                await parseKufarProduct(url);
-
-        }
-
-        else if (url.includes("5element.by")) {
-
-            updatedProduct =
-                await parse5elementProduct(url);
-
-        }
+        const updatedProduct =
+            await parseProductByUrl(url);
 
         if (
             !updatedProduct ||
             !updatedProduct.price
         ) {
 
+            console.log(
+                "Update failed"
+            );
+
             return res.send(
                 "Failed to update product"
             );
 
         }
-
-        // обновить документ
 
         await docRef.update({
 
@@ -508,6 +356,10 @@ app.get("/updateProduct", async (req, res) => {
                 new Date()
 
         });
+
+        console.log(
+            "Updated successfully"
+        );
 
         res.send(
             "Product updated"
@@ -527,6 +379,10 @@ app.get("/updateProduct", async (req, res) => {
 
 });
 
+/* ========================================= */
+/* Обновить ВСЕ товары */
+/* ========================================= */
+
 app.get("/updateAllProducts", async (req, res) => {
 
     try {
@@ -536,36 +392,23 @@ app.get("/updateAllProducts", async (req, res) => {
                 .collection("products")
                 .get();
 
+        let updatedCount = 0;
+
         for (const doc of snapshot.docs) {
 
             const product =
                 doc.data();
 
-            console.log(
-                "Updating:",
-                product.link
-            );
-
-            let updatedProduct =
-                null;
-
             const url =
                 product.link;
 
-            if (url.includes("onliner.by")) {
-                updatedProduct =
-                    await parseOnlinerProduct(url);
-            }
+            console.log(
+                "Updating:",
+                url
+            );
 
-            else if (url.includes("5element.by")) {
-                updatedProduct =
-                    await parse5elementProduct(url);
-            }
-
-            else if (url.includes("21vek.by")) {
-                updatedProduct =
-                    await parse21vekProduct(url);
-            }
+            const updatedProduct =
+                await parseProductByUrl(url);
 
             if (
                 updatedProduct &&
@@ -577,19 +420,41 @@ app.get("/updateAllProducts", async (req, res) => {
                     .doc(doc.id)
                     .update({
 
+                        title:
+                        updatedProduct.title,
+
                         price:
                         updatedProduct.price,
+
+                        image:
+                        updatedProduct.image,
 
                         lastUpdated:
                             new Date()
 
                     });
 
+                updatedCount++;
+
+                console.log(
+                    "Updated successfully"
+                );
+
+            }
+
+            else {
+
+                console.log(
+                    "Update failed"
+                );
+
             }
 
         }
 
-        res.send("All products updated");
+        res.send(
+            `Updated ${updatedCount} products`
+        );
 
     }
 
@@ -604,6 +469,11 @@ app.get("/updateAllProducts", async (req, res) => {
     }
 
 });
+
+/* ========================================= */
+
+const PORT =
+    process.env.PORT || 3000;
 
 app.listen(
     PORT,
