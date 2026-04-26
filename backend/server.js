@@ -471,6 +471,146 @@ app.get("/updateAllProducts", async (req, res) => {
 });
 
 /* ========================================= */
+/* Обновить товары по списку айдишников */
+/* ========================================= */
+
+app.get("/updateProductsByIds", async (req, res) => {
+
+    try {
+
+        const idsParam =
+            req.query.ids;
+
+        if (!idsParam) {
+
+            return res.send(
+                "No ids provided"
+            );
+
+        }
+
+        const ids =
+            idsParam
+                .split(",")
+                .map(id => id.trim());
+
+        console.log(
+            "Updating IDs:",
+            ids
+        );
+
+        let updatedCount =
+            0;
+
+        for (const id of ids) {
+
+            try {
+
+                const docRef =
+                    db
+                        .collection("products")
+                        .doc(id);
+
+                const snapshot =
+                    await docRef.get();
+
+                if (!snapshot.exists) {
+
+                    console.log(
+                        "Not found:",
+                        id
+                    );
+
+                    continue;
+
+                }
+
+                const product =
+                    snapshot.data();
+
+                const url =
+                    product.link;
+
+                console.log(
+                    "Updating:",
+                    url
+                );
+
+                const updatedProduct =
+                    await parseProductByUrl(url);
+
+                if (
+                    updatedProduct &&
+                    updatedProduct.price
+                ) {
+
+                    await docRef.update({
+
+                        title:
+                        updatedProduct.title,
+
+                        price:
+                        updatedProduct.price,
+
+                        image:
+                        updatedProduct.image,
+
+                        lastUpdated:
+                            new Date()
+
+                    });
+
+                    updatedCount++;
+
+                    console.log(
+                        "Updated:",
+                        id
+                    );
+
+                }
+
+                else {
+
+                    console.log(
+                        "Failed:",
+                        id
+                    );
+
+                }
+
+            }
+
+            catch (err) {
+
+                console.log(
+                    "Error updating:",
+                    id,
+                    err.message
+                );
+
+            }
+
+        }
+
+        res.send(
+            `Updated ${updatedCount} products`
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+/* ========================================= */
 
 const PORT =
     process.env.PORT || 3000;
