@@ -741,7 +741,76 @@ app.get("/deleteProductsByIds", async (req, res) => {
     }
 
 });
+/* ========================================= */
+/* Товары по ссылкам */
+/* ========================================= */
 
+
+app.get("/getProductsByLinks", async (req, res) => {
+
+    try {
+
+        const linksParam =
+            req.query.links;
+
+        if (!linksParam) {
+
+            return res.send(
+                "No links provided"
+            );
+
+        }
+
+        const links =
+            linksParam
+                .split(",")
+                .map(link => link.trim());
+
+        const products =
+            [];
+
+        for (const link of links) {
+
+            const snapshot =
+                await db
+                    .collection("products")
+                    .where(
+                        "link",
+                        "==",
+                        link
+                    )
+                    .get();
+
+            snapshot.forEach(doc => {
+
+                products.push({
+
+                    id:
+                    doc.id,
+
+                    ...doc.data()
+
+                });
+
+            });
+
+        }
+
+        res.send(products);
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
 /* ========================================= */
 
 const PORT =
