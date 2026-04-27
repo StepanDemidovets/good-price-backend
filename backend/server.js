@@ -471,7 +471,7 @@ app.get("/updateAllProducts", async (req, res) => {
 });
 
 /* ========================================= */
-/* Обновить товары по списку айдишников */
+/* Обновить/удалить/просмотреть товары по списку айдишников */
 /* ========================================= */
 
 app.get("/updateProductsByIds", async (req, res) => {
@@ -594,6 +594,138 @@ app.get("/updateProductsByIds", async (req, res) => {
 
         res.send(
             `Updated ${updatedCount} products`
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.get("/getProductsByIds", async (req, res) => {
+
+    try {
+
+        const idsParam =
+            req.query.ids;
+
+        if (!idsParam) {
+
+            return res.send(
+                "No ids provided"
+            );
+
+        }
+
+        const ids =
+            idsParam
+                .split(",")
+                .map(id => id.trim());
+
+        const products =
+            [];
+
+        for (const id of ids) {
+
+            const doc =
+                await db
+                    .collection("products")
+                    .doc(id)
+                    .get();
+
+            if (doc.exists) {
+
+                products.push({
+
+                    id:
+                    doc.id,
+
+                    ...doc.data()
+
+                });
+
+            }
+
+        }
+
+        res.send(products);
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res
+            .status(500)
+            .send(error.message);
+
+    }
+
+});
+
+app.get("/deleteProductsByIds", async (req, res) => {
+
+    try {
+
+        const idsParam =
+            req.query.ids;
+
+        if (!idsParam) {
+
+            return res.send(
+                "No ids provided"
+            );
+
+        }
+
+        const ids =
+            idsParam
+                .split(",")
+                .map(id => id.trim());
+
+        let deletedCount =
+            0;
+
+        for (const id of ids) {
+
+            try {
+
+                await db
+                    .collection("products")
+                    .doc(id)
+                    .delete();
+
+                deletedCount++;
+
+                console.log(
+                    "Deleted:",
+                    id
+                );
+
+            }
+
+            catch (err) {
+
+                console.log(
+                    "Delete failed:",
+                    id
+                );
+
+            }
+
+        }
+
+        res.send(
+            `Deleted ${deletedCount} products`
         );
 
     }
