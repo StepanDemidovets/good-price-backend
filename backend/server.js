@@ -253,9 +253,10 @@ app.get("/deleteProduct", async (req, res) => {
             req.query.id;
 
         if (!id) {
-            return res.send(
-                "No id provided"
-            );
+            res.status(400).json({
+                success: false,
+                message: "No id provided"
+            });
         }
 
         await db
@@ -263,9 +264,7 @@ app.get("/deleteProduct", async (req, res) => {
             .doc(id)
             .delete();
 
-        res.send(
-            "Product deleted"
-        );
+        res.json({ success: true, message: "Product deleted" });
 
     }
 
@@ -361,9 +360,7 @@ app.get("/updateProduct", async (req, res) => {
             "Updated successfully"
         );
 
-        res.send(
-            "Product updated"
-        );
+        res.json({ success: true, message: "Product updated" });
 
     }
 
@@ -452,9 +449,10 @@ app.get("/updateAllProducts", async (req, res) => {
 
         }
 
-        res.send(
-            `Updated ${updatedCount} products`
-        );
+        res.json({
+            success: true,
+            updated: updatedCount
+        });
 
     }
 
