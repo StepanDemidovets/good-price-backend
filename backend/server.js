@@ -117,85 +117,67 @@ app.get("/", (req, res) => {
 /* ========================================= */
 
 app.get("/manualScraper", async (req, res) => {
-
     try {
 
-        const url =
-            req.query.url;
+        const { url, userId } = req.query;
 
-        console.log(
-            "URL:",
-            url
-        );
-
-        const product =
-            await parseProductByUrl(url);
-
-        if (!product) {
-
-            return res
-                .status(400)
-                .send("Unsupported site");
-
+        if (!url || !userId) {
+            return res.status(400).json({ error: "Missing params" });
         }
 
-        if (
-            !product.title ||
-            !product.price
-        ) {
+        const userRef = db.collection("users").doc(userId);
 
-            console.log(
-                "Product invalid, not saving"
-            );
-
-            return res.send(product);
-
-        }
-
-        await db
+        // ищем продукт
+        const snapshot = await db
             .collection("products")
-            .add({
+            .where("link", "==", url)
+            .get();
 
-                title:
-                    product.title || null,
+        let productId;
 
-                price:
-                    product.price || null,
+        if (!snapshot.empty) {
 
-                image:
-                    product.image || null,
+            const doc = snapshot.docs[0];
+            productId = doc.id;
 
-                link:
-                product.link,
-
-                source:
-                product.source,
-
-                status:
-                    "ok",
-
-                createdAt:
-                    new Date(),
-
-                lastUpdated:
-                    new Date()
-
+            // увеличиваем счётчик
+            await doc.ref.update({
+                userCount: admin.firestore.FieldValue.increment(1)
             });
 
-        res.send(product);
+        } else {
 
+            const parsed = await parseProductByUrl(url);
+
+            if (!parsed || !parsed.price) {
+                return res.status(400).json({ error: "Parse failed" });
+            }
+
+            const newDoc = await db.collection("products").add({
+                title: parsed.title,
+                price: parsed.price,
+                image: parsed.image || null,
+                link: parsed.link,
+                source: parsed.source,
+                createdAt: new Date(),
+                lastUpdated: new Date(),
+                userCount: 1
+            });
+
+            productId = newDoc.id;
+        }
+
+        // добавляем пользователю
+        await userRef.update({
+            trackedProducts: admin.firestore.FieldValue.arrayUnion(productId)
+        });
+
+        res.json({ success: true, productId });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: e.message });
     }
-
-    catch (error) {
-
-        console.error(error);
-
-        res
-            .status(500)
-            .send(error.message);
-
-    }
-
 });
 
 /* ========================================= */
@@ -809,6 +791,92 @@ app.get("/getProductsByLinks", async (req, res) => {
     }
 
 });
+
+/* ========================================= */
+/* Удаление/добавление товаров пользователю */
+/* ========================================= */
+
+app.get("/deleteUserProduct", async (req, res) => {
+    try {
+
+        const { userId, productId } = req.query;
+
+        if (!userId || !productId) {
+            return res.status(400).json({ error: "Missing params" });
+        }
+
+        const userRef = db.collection("users").doc(userId);
+        const productRef = db.collection("products").doc(productId);
+
+        // удаляем у пользователя
+        await userRef.update({
+            trackedProducts: admin.firestore.FieldValue.arrayRemove(productId)
+        });
+
+        const productDoc = await productRef.get();
+
+        if (productDoc.exists) {
+
+            const currentCount = productDoc.data().userCount || 1;
+
+            if (currentCount <= 1) {
+
+                // никто не отслеживает → удаляем продукт
+                await productRef.delete();
+
+            } else {
+
+                await productRef.update({
+                    userCount: admin.firestore.FieldValue.increment(-1)
+                });
+
+            }
+        }
+
+        res.json({ success: true });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+app.get("/userProducts", async (req, res) => {
+
+    try {
+
+        const { userId } = req.query;
+
+        const userDoc = await db.collection("users").doc(userId).get();
+
+        if (!userDoc.exists) return res.json([]);
+
+        const ids = userDoc.data().trackedProducts || [];
+
+        const products = [];
+
+        for (const id of ids) {
+            const doc = await db.collection("products").doc(id).get();
+
+            if (doc.exists) {
+                products.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            }
+        }
+
+        res.json(products);
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+
 /* ========================================= */
 
 const PORT =
