@@ -39,8 +39,6 @@ const {
     parse5elementProduct
 } = require("./services/parse5elementProduct");
 
-const admin = require("firebase-admin");
-
 const serviceAccount =
     JSON.parse(process.env.FIREBASE_KEY);
 
