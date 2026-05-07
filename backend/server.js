@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
-const messaging = admin.messaging();
+
 
 const {
     parse21vekProduct
@@ -48,6 +48,8 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
+
+const messaging = admin.messaging();
 
 db.settings({
     ignoreUndefinedProperties: true
