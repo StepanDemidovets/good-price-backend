@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const admin = require("firebase-admin");
+const messaging = admin.messaging();
 
 const {
     parse21vekProduct
@@ -218,6 +220,62 @@ app.get("/products", async (req, res) => {
         res
             .status(500)
             .send(error.message);
+
+    }
+
+});
+
+/* ========================================= */
+/* Save FCM token */
+/* ========================================= */
+
+app.post("/saveFcmToken", async (req, res) => {
+
+    try {
+
+        const {
+            userId,
+            token
+        } = req.body;
+
+        if (!userId || !token) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Missing userId or token"
+            });
+
+        }
+
+        const userRef =
+            db.collection("users").doc(userId);
+
+        await userRef.set({
+
+            fcmTokens:
+                admin.firestore.FieldValue.arrayUnion(token),
+
+            updatedAt:
+                new Date()
+
+        }, {
+            merge: true
+        });
+
+        res.json({
+            success: true
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
 
     }
 
