@@ -13,6 +13,12 @@ backend\
 Имя файла: server.js
     const express = require("express");
     const cors = require("cors");
+    const admin = require("firebase-admin");
+    
+    
+    const {
+        parse21vekProduct
+    } = require("./services/parse21vekProduct");
     
     const {
         parseOnlinerProduct
@@ -43,186 +49,906 @@ backend\
     } = require("./services/parseKufarProduct");
     
     const {
-        parse5ElementProduct
+        parse5elementProduct
     } = require("./services/parse5elementProduct");
     
-    const admin = require("firebase-admin");
-    
-    const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+    const serviceAccount =
+        JSON.parse(process.env.FIREBASE_KEY);
     
     admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+        credential:
+            admin.credential.cert(serviceAccount),
     });
     
     const db = admin.firestore();
     
+    const messaging = admin.messaging();
+    
+    db.settings({
+        ignoreUndefinedProperties: true
+    });
+    
     const app = express();
     
     app.use(cors());
+    app.use(express.json());
     
-    app.get(
-        "/manualScraper",
-        async (req, res) => {
+    /* ========================================= */
+    /* Универсальный парсер по URL */
+    /* ========================================= */
     
-            try {
+    async function parseProductByUrl(url) {
     
-                const url =
-                    req.query.url;
+        if (url.includes("onliner.by")) {
+            return await parseOnlinerProduct(url);
+        }
     
-                console.log(
-                    "URL:",
-                    url
-                );
+        else if (url.includes("deal.by")) {
+            return await parseDealProduct(url);
+        }
     
-                let product = null;
+        else if (url.includes("7745.by")) {
+            return await parse7745Product(url);
+        }
     
-                if (
-                    url.includes(
-                        "onliner.by"
-                    )
-                ) {
+        else if (url.includes("21vek.by")) {
+            return await parse21vekProduct(url);
+        }
     
-                    product =
-                        await parseOnlinerProduct(
-                            url
-                        );
+        else if (url.includes("sila.by")) {
+            return await parseElectrosilaProduct(url);
+        }
     
+        else if (url.includes("shop.by")) {
+            return await parseShopProduct(url);
+        }
+    
+        else if (url.includes("emall.by")) {
+            return await parseEmallProduct(url);
+        }
+    
+        else if (url.includes("kufar.by")) {
+            return await parseKufarProduct(url);
+        }
+    
+        else if (url.includes("5element.by")) {
+            return await parse5elementProduct(url);
+        }
+    
+        return null;
+    
+    }
+    
+    /* ========================================= */
+    /* Health check */
+    /* ========================================= */
+    
+    app.get("/", (req, res) => {
+        res.send("Backend is running");
+    });
+    
+    /* ========================================= */
+    /* Добавить товар */
+    /* ========================================= */
+    
+    app.get("/manualScraper", async (req, res) => {
+        try {
+    
+            const { url, userId } = req.query;
+    
+            if (!url || !userId) {
+                return res.status(400).json({ error: "Missing params" });
+            }
+    
+            const userRef = db.collection("users").doc(userId);
+    
+            // ищем продукт
+            const snapshot = await db
+                .collection("products")
+                .where("link", "==", url)
+                .get();
+    
+            let productId;
+    
+            if (!snapshot.empty) {
+    
+                const doc = snapshot.docs[0];
+                productId = doc.id;
+    
+                // увеличиваем счётчик
+                await doc.ref.update({
+                    userCount: admin.firestore.FieldValue.increment(1)
+                });
+    
+            } else {
+    
+                const parsed = await parseProductByUrl(url);
+    
+                if (!parsed || !parsed.price) {
+                    return res.status(400).json({ error: "Parse failed" });
                 }
     
-                else if (
-                    url.includes(
-                        "deal.by"
-                    )
-                ) {
+                const newDoc = await db.collection("products").add({
+                    title: parsed.title,
+                    price: parsed.price,
+                    image: parsed.image || null,
+                    link: parsed.link,
+                    source: parsed.source,
+                    createdAt: new Date(),
+                    lastUpdated: new Date(),
+                    userCount: 1
+                });
     
-                    product =
-                        await parseDealProduct(
-                            url
-                        );
+                productId = newDoc.id;
+            }
     
-                }
+            // добавляем пользователю
+            await userRef.update({
+                trackedProducts: admin.firestore.FieldValue.arrayUnion(productId)
+            });
     
-                else if (
-                    url.includes(
-                        "7745.by"
-                    )
-                ) {
+            res.json({ success: true, productId });
     
-                    product =
-                        await parse7745Product(
-                            url
-                        );
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: e.message });
+        }
+    });
     
-                }
+    /* ========================================= */
+    /* Получить все товары */
+    /* ========================================= */
     
-                else if (
-                    url.includes(
-                        "sila.by"
-                    )
-                ) {
+    app.get("/products", async (req, res) => {
     
-                    product =
-                        await parseElectrosilaProduct(
-                            url
-                        );
+        try {
     
-                }
-    
-                else if (
-                    url.includes(
-                        "shop.by"
-                    )
-                ) {
-    
-                    product =
-                        await parseShopProduct(
-                            url
-                        );
-    
-                }
-    
-                else if (
-                    url.includes(
-                        "emall.by"
-                    )
-                ) {
-    
-                    product =
-                        await parseEmallProduct(
-                            url
-                        );
-    
-                }
-    
-                else if (
-                    url.includes(
-                        "kufar.by"
-                    )
-                ) {
-    
-                    product =
-                        await parseKufarProduct(
-                            url
-                        );
-    
-                }
-    
-                else if (
-                    url.includes(
-                        "5element.by"
-                    )
-                ) {
-    
-                    product =
-                        await parse5ElementProduct(
-                            url
-                        );
-    
-                }
-    
-                if (!product) {
-    
-                    return res
-                        .status(400)
-                        .send(
-                            "Unsupported site"
-                        );
-    
-                }
-    
+            const snapshot =
                 await db
-                    .collection(
-                        "products"
+                    .collection("products")
+                    .orderBy(
+                        "createdAt",
+                        "desc"
                     )
-                    .add({
+                    .get();
     
-                        ...product,
+            const products =
+                snapshot.docs.map(doc => ({
     
-                        createdAt:
-                            new Date(),
+                    id:
+                    doc.id,
     
-                        lastUpdated:
-                            new Date()
+                    ...doc.data()
     
-                    });
+                }));
     
-                res.send(product);
-    
-            }
-    
-            catch (error) {
-    
-                console.error(error);
-    
-                res
-                    .status(500)
-                    .send("Error");
-    
-            }
+            res.send(products);
     
         }
     
-    );
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Save FCM token */
+    /* ========================================= */
+    
+    app.post("/saveFcmToken", async (req, res) => {
+    
+        try {
+    
+            const {
+                userId,
+                token
+            } = req.body;
+    
+            if (!userId || !token) {
+    
+                return res.status(400).json({
+                    success: false,
+                    message: "Missing userId or token"
+                });
+    
+            }
+    
+            const userRef =
+                db.collection("users").doc(userId);
+    
+            await userRef.set({
+    
+                fcmTokens:
+                    admin.firestore.FieldValue.arrayUnion(token),
+    
+                updatedAt:
+                    new Date()
+    
+            }, {
+                merge: true
+            });
+    
+            res.json({
+                success: true
+            });
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Удалить товар */
+    /* ========================================= */
+    
+    app.get("/deleteProduct", async (req, res) => {
+    
+        try {
+    
+            const id =
+                req.query.id;
+    
+            if (!id) {
+                res.status(400).json({
+                    success: false,
+                    message: "No id provided"
+                });
+            }
+    
+            await db
+                .collection("products")
+                .doc(id)
+                .delete();
+    
+            res.json({ success: true, message: "Product deleted" });
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Обновить один товар */
+    /* ========================================= */
+    
+    app.get("/updateProduct", async (req, res) => {
+    
+        try {
+    
+            const id =
+                req.query.id;
+    
+            if (!id) {
+                return res.send(
+                    "No id provided"
+                );
+            }
+    
+            const docRef =
+                db
+                    .collection("products")
+                    .doc(id);
+    
+            const snapshot =
+                await docRef.get();
+    
+            if (!snapshot.exists) {
+                return res.send(
+                    "Product not found"
+                );
+            }
+    
+            const product =
+                snapshot.data();
+    
+            const url =
+                product.link;
+    
+            console.log(
+                "Updating product:",
+                url
+            );
+    
+            const updatedProduct =
+                await parseProductByUrl(url);
+    
+            if (
+                !updatedProduct ||
+                !updatedProduct.price
+            ) {
+    
+                console.log(
+                    "Update failed"
+                );
+    
+                return res.send(
+                    "Failed to update product"
+                );
+    
+            }
+    
+            await docRef.update({
+    
+                title:
+                updatedProduct.title,
+    
+                price:
+                updatedProduct.price,
+    
+                image:
+                updatedProduct.image,
+    
+                lastUpdated:
+                    new Date()
+    
+            });
+    
+            console.log(
+                "Updated successfully"
+            );
+    
+            res.json({ success: true, message: "Product updated" });
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Обновить ВСЕ товары */
+    /* ========================================= */
+    
+    app.get("/updateAllProducts", async (req, res) => {
+    
+        try {
+    
+            const snapshot =
+                await db
+                    .collection("products")
+                    .get();
+    
+            let updatedCount = 0;
+    
+            for (const doc of snapshot.docs) {
+    
+                const product =
+                    doc.data();
+    
+                const url =
+                    product.link;
+    
+                console.log(
+                    "Updating:",
+                    url
+                );
+    
+                const updatedProduct =
+                    await parseProductByUrl(url);
+    
+                if (
+                    updatedProduct &&
+                    updatedProduct.price
+                ) {
+    
+                    await db
+                        .collection("products")
+                        .doc(doc.id)
+                        .update({
+    
+                            title:
+                            updatedProduct.title,
+    
+                            price:
+                            updatedProduct.price,
+    
+                            image:
+                            updatedProduct.image,
+    
+                            lastUpdated:
+                                new Date()
+    
+                        });
+    
+                    updatedCount++;
+    
+                    console.log(
+                        "Updated successfully"
+                    );
+    
+                }
+    
+                else {
+    
+                    console.log(
+                        "Update failed"
+                    );
+    
+                }
+    
+            }
+    
+            res.json({
+                success: true,
+                updated: updatedCount
+            });
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Обновить/удалить/просмотреть товары по списку айдишников */
+    /* ========================================= */
+    
+    app.get("/updateProductsByIds", async (req, res) => {
+    
+        try {
+    
+            const idsParam =
+                req.query.ids;
+    
+            if (!idsParam) {
+    
+                return res.send(
+                    "No ids provided"
+                );
+    
+            }
+    
+            const ids =
+                idsParam
+                    .split(",")
+                    .map(id => id.trim());
+    
+            console.log(
+                "Updating IDs:",
+                ids
+            );
+    
+            let updatedCount =
+                0;
+    
+            for (const id of ids) {
+    
+                try {
+    
+                    const docRef =
+                        db
+                            .collection("products")
+                            .doc(id);
+    
+                    const snapshot =
+                        await docRef.get();
+    
+                    if (!snapshot.exists) {
+    
+                        console.log(
+                            "Not found:",
+                            id
+                        );
+    
+                        continue;
+    
+                    }
+    
+                    const product =
+                        snapshot.data();
+    
+                    const url =
+                        product.link;
+    
+                    console.log(
+                        "Updating:",
+                        url
+                    );
+    
+                    const updatedProduct =
+                        await parseProductByUrl(url);
+    
+                    if (
+                        updatedProduct &&
+                        updatedProduct.price
+                    ) {
+    
+                        await docRef.update({
+    
+                            title:
+                            updatedProduct.title,
+    
+                            price:
+                            updatedProduct.price,
+    
+                            image:
+                            updatedProduct.image,
+    
+                            lastUpdated:
+                                new Date()
+    
+                        });
+    
+                        updatedCount++;
+    
+                        console.log(
+                            "Updated:",
+                            id
+                        );
+    
+                    }
+    
+                    else {
+    
+                        console.log(
+                            "Failed:",
+                            id
+                        );
+    
+                    }
+    
+                }
+    
+                catch (err) {
+    
+                    console.log(
+                        "Error updating:",
+                        id,
+                        err.message
+                    );
+    
+                }
+    
+            }
+    
+            res.send(
+                `Updated ${updatedCount} products`
+            );
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    app.get("/getProductsByIds", async (req, res) => {
+    
+        try {
+    
+            const idsParam =
+                req.query.ids;
+    
+            if (!idsParam) {
+    
+                return res.send(
+                    "No ids provided"
+                );
+    
+            }
+    
+            const ids =
+                idsParam
+                    .split(",")
+                    .map(id => id.trim());
+    
+            const products =
+                [];
+    
+            for (const id of ids) {
+    
+                const doc =
+                    await db
+                        .collection("products")
+                        .doc(id)
+                        .get();
+    
+                if (doc.exists) {
+    
+                    products.push({
+    
+                        id:
+                        doc.id,
+    
+                        ...doc.data()
+    
+                    });
+    
+                }
+    
+            }
+    
+            res.send(products);
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    app.get("/deleteProductsByIds", async (req, res) => {
+    
+        try {
+    
+            const idsParam =
+                req.query.ids;
+    
+            if (!idsParam) {
+    
+                return res.send(
+                    "No ids provided"
+                );
+    
+            }
+    
+            const ids =
+                idsParam
+                    .split(",")
+                    .map(id => id.trim());
+    
+            let deletedCount =
+                0;
+    
+            for (const id of ids) {
+    
+                try {
+    
+                    await db
+                        .collection("products")
+                        .doc(id)
+                        .delete();
+    
+                    deletedCount++;
+    
+                    console.log(
+                        "Deleted:",
+                        id
+                    );
+    
+                }
+    
+                catch (err) {
+    
+                    console.log(
+                        "Delete failed:",
+                        id
+                    );
+    
+                }
+    
+            }
+    
+            res.send(
+                `Deleted ${deletedCount} products`
+            );
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    /* ========================================= */
+    /* Товары по ссылкам */
+    /* ========================================= */
+    
+    
+    app.get("/getProductsByLinks", async (req, res) => {
+    
+        try {
+    
+            const linksParam =
+                req.query.links;
+    
+            if (!linksParam) {
+    
+                return res.send(
+                    "No links provided"
+                );
+    
+            }
+    
+            const links =
+                linksParam
+                    .split(",")
+                    .map(link => link.trim());
+    
+            const products =
+                [];
+    
+            for (const link of links) {
+    
+                const snapshot =
+                    await db
+                        .collection("products")
+                        .where(
+                            "link",
+                            "==",
+                            link
+                        )
+                        .get();
+    
+                snapshot.forEach(doc => {
+    
+                    products.push({
+    
+                        id:
+                        doc.id,
+    
+                        ...doc.data()
+    
+                    });
+    
+                });
+    
+            }
+    
+            res.send(products);
+    
+        }
+    
+        catch (error) {
+    
+            console.error(error);
+    
+            res
+                .status(500)
+                .send(error.message);
+    
+        }
+    
+    });
+    
+    /* ========================================= */
+    /* Удаление/добавление товаров пользователю */
+    /* ========================================= */
+    
+    app.get("/deleteUserProduct", async (req, res) => {
+        try {
+    
+            const { userId, productId } = req.query;
+    
+            if (!userId || !productId) {
+                return res.status(400).json({ error: "Missing params" });
+            }
+    
+            const userRef = db.collection("users").doc(userId);
+            const productRef = db.collection("products").doc(productId);
+    
+            // удаляем у пользователя
+            await userRef.update({
+                trackedProducts: admin.firestore.FieldValue.arrayRemove(productId)
+            });
+    
+            const productDoc = await productRef.get();
+    
+            if (productDoc.exists) {
+    
+                const currentCount = productDoc.data().userCount || 1;
+    
+                if (currentCount <= 1) {
+    
+                    // никто не отслеживает → удаляем продукт
+                    await productRef.delete();
+    
+                } else {
+    
+                    await productRef.update({
+                        userCount: admin.firestore.FieldValue.increment(-1)
+                    });
+    
+                }
+            }
+    
+            res.json({ success: true });
+    
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: e.message });
+        }
+    });
+    
+    
+    app.get("/userProducts", async (req, res) => {
+    
+        try {
+    
+            const { userId } = req.query;
+    
+            const userDoc = await db.collection("users").doc(userId).get();
+    
+            if (!userDoc.exists) return res.json([]);
+    
+            const ids = userDoc.data().trackedProducts || [];
+    
+            const products = [];
+    
+            for (const id of ids) {
+                const doc = await db.collection("products").doc(id).get();
+    
+                if (doc.exists) {
+                    products.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                }
+            }
+    
+            res.json(products);
+    
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: e.message });
+        }
+    });
+    
+    
+    
+    /* ========================================= */
     
     const PORT =
         process.env.PORT || 3000;
@@ -732,10 +1458,9 @@ backend\
     
             }
     
-            console.log(
-                "Image:",
-                image
-            );
+            console.log("Title:", title);
+            console.log("Price:", price);
+            console.log("Image:", image);
     
             // ----------------
     
@@ -796,6 +1521,22 @@ backend\
     const axios = require("axios");
     const cheerio = require("cheerio");
     
+    const { wrapper } =
+        require("axios-cookiejar-support");
+    
+    const tough =
+        require("tough-cookie");
+    
+    const jar =
+        new tough.CookieJar();
+    
+    const client =
+        wrapper(
+            axios.create({
+                jar
+            })
+        );
+    
     async function parse7745Product(url) {
     
         try {
@@ -806,18 +1547,58 @@ backend\
             );
     
             const response =
-                await axios.get(
+                await client.get(
                     url,
                     {
                         headers: {
+    
                             "User-Agent":
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    
                             "Accept":
-                                "text/html",
+                                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    
+                            "Accept-Language":
+                                "ru-RU,ru;q=0.9,en-US;q=0.8",
+    
+                            "Accept-Encoding":
+                                "gzip, deflate, br",
+    
+                            "Connection":
+                                "keep-alive",
+    
+                            "Upgrade-Insecure-Requests":
+                                "1",
+    
+                            "Sec-Fetch-Dest":
+                                "document",
+    
+                            "Sec-Fetch-Mode":
+                                "navigate",
+    
+                            "Sec-Fetch-Site":
+                                "none",
+    
+                            "Sec-Fetch-User":
+                                "?1"
+    
                         },
-                        timeout: 15000,
+    
+                        timeout: 20000,
+    
+                        maxRedirects: 5,
+    
+                        decompress: true,
+    
+                        validateStatus: () => true
                     }
                 );
+    
+            console.log(
+                "STATUS:",
+                response.status
+            );
+    
     
             const data =
                 response.data;
@@ -826,6 +1607,14 @@ backend\
                 "HTML length:",
                 data.length
             );
+    
+            if (data.includes("403")) {
+    
+                console.log(
+                    "7745 BLOCKED BY SITE"
+                );
+    
+            }
     
             const $ =
                 cheerio.load(data);
@@ -915,10 +1704,9 @@ backend\
     
             }
     
-            console.log(
-                "Image:",
-                image
-            );
+            console.log("Title:", title);
+            console.log("Price:", price);
+            console.log("Image:", image);
     
             if (
                 !title
@@ -1327,6 +2115,22 @@ backend\
     const axios = require("axios");
     const cheerio = require("cheerio");
     
+    const { wrapper } =
+        require("axios-cookiejar-support");
+    
+    const tough =
+        require("tough-cookie");
+    
+    const jar =
+        new tough.CookieJar();
+    
+    const client =
+        wrapper(
+            axios.create({
+                jar
+            })
+        );
+    
     async function parseEmallProduct(url) {
     
         try {
@@ -1337,16 +2141,50 @@ backend\
             );
     
             const response =
-                await axios.get(
+                await client.get(
                     url,
                     {
                         headers: {
+    
                             "User-Agent":
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    
                             "Accept":
-                                "text/html",
+                                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    
+                            "Accept-Language":
+                                "ru-RU,ru;q=0.9,en-US;q=0.8",
+    
+                            "Accept-Encoding":
+                                "gzip, deflate, br",
+    
+                            "Connection":
+                                "keep-alive",
+    
+                            "Upgrade-Insecure-Requests":
+                                "1",
+    
+                            "Sec-Fetch-Dest":
+                                "document",
+    
+                            "Sec-Fetch-Mode":
+                                "navigate",
+    
+                            "Sec-Fetch-Site":
+                                "none",
+    
+                            "Sec-Fetch-User":
+                                "?1"
+    
                         },
-                        timeout: 15000,
+    
+                        timeout: 20000,
+    
+                        maxRedirects: 5,
+    
+                        decompress: true,
+    
+                        validateStatus: () => true
                     }
                 );
     
@@ -1357,6 +2195,14 @@ backend\
                 "HTML length:",
                 data.length
             );
+    
+            if (data.includes("403")) {
+    
+                console.log(
+                    "Emall BLOCKED BY SITE"
+                );
+    
+            }
     
             const $ =
                 cheerio.load(data);
@@ -1512,10 +2358,9 @@ backend\
     
             }
     
-            console.log(
-                "Image:",
-                image
-            );
+            console.log("Title:", title);
+            console.log("Price:", price);
+            console.log("Image:", image);
     
             // ----------------
     

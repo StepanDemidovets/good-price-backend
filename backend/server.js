@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
-
+const cron = require("node-cron");
 
 const {
     parse21vekProduct
@@ -119,67 +119,216 @@ app.get("/", (req, res) => {
 /* ========================================= */
 
 app.get("/manualScraper", async (req, res) => {
+
     try {
 
         const { url, userId } = req.query;
 
         if (!url || !userId) {
-            return res.status(400).json({ error: "Missing params" });
+
+            return res.status(400).json({
+                success: false,
+                message: "Missing params"
+            });
+
         }
 
-        const userRef = db.collection("users").doc(userId);
+        const userRef =
+            db.collection("users").doc(userId);
 
-        // ищем продукт
-        const snapshot = await db
-            .collection("products")
-            .where("link", "==", url)
-            .get();
+        const userDoc =
+            await userRef.get();
+
+        if (!userDoc.exists) {
+
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+
+        }
+
+        const userData =
+            userDoc.data();
+
+        /* ========================================= */
+        /* Проверка лимита FREE */
+        /* ========================================= */
+
+        const trackedProducts =
+            userData.trackedProducts || [];
+
+        const plan =
+            userData.plan || "free";
+
+        if (
+            plan === "free" &&
+            trackedProducts.length >= 5
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Free plan limit reached"
+            });
+
+        }
+
+        /* ========================================= */
+        /* Проверка — уже отслеживается */
+        /* ========================================= */
+
+        const existingSnapshot =
+            await db
+                .collection("products")
+                .where("link", "==", url)
+                .get();
 
         let productId;
 
-        if (!snapshot.empty) {
+        if (!existingSnapshot.empty) {
 
-            const doc = snapshot.docs[0];
-            productId = doc.id;
+            const doc =
+                existingSnapshot.docs[0];
 
-            // увеличиваем счётчик
-            await doc.ref.update({
-                userCount: admin.firestore.FieldValue.increment(1)
-            });
+            productId =
+                doc.id;
 
-        } else {
+            const productData =
+                doc.data();
 
-            const parsed = await parseProductByUrl(url);
+            const trackedBy =
+                productData.trackedBy || [];
 
-            if (!parsed || !parsed.price) {
-                return res.status(400).json({ error: "Parse failed" });
+            // уже отслеживает
+            if (trackedBy.includes(userId)) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Product already tracked"
+                });
+
             }
 
-            const newDoc = await db.collection("products").add({
-                title: parsed.title,
-                price: parsed.price,
-                image: parsed.image || null,
-                link: parsed.link,
-                source: parsed.source,
-                createdAt: new Date(),
-                lastUpdated: new Date(),
-                userCount: 1
+            /* ========================================= */
+            /* Обновляем existing product */
+            /* ========================================= */
+
+            await doc.ref.update({
+
+                userCount:
+                    admin.firestore.FieldValue.increment(1),
+
+                trackedBy:
+                    admin.firestore.FieldValue.arrayUnion(userId)
+
             });
 
-            productId = newDoc.id;
         }
 
-        // добавляем пользователю
+        else {
+
+            /* ========================================= */
+            /* Парсим новый товар */
+            /* ========================================= */
+
+            const parsed =
+                await parseProductByUrl(url);
+
+            if (
+                !parsed ||
+                !parsed.price
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Parse failed"
+                });
+
+            }
+
+            const now =
+                new Date();
+
+            const newDoc =
+                await db.collection("products").add({
+
+                    title:
+                    parsed.title,
+
+                    price:
+                    parsed.price,
+
+                    image:
+                        parsed.image || null,
+
+                    link:
+                    parsed.link,
+
+                    source:
+                    parsed.source,
+
+                    createdAt:
+                    now,
+
+                    lastUpdated:
+                    now,
+
+                    lastAutoUpdate:
+                    now,
+
+                    userCount:
+                        1,
+
+                    trackedBy:
+                        [userId],
+
+                    priceHistory: [
+                        {
+                            price: parsed.price,
+                            updatedAt: now
+                        }
+                    ]
+
+                });
+
+            productId =
+                newDoc.id;
+
+        }
+
+        /* ========================================= */
+        /* Добавляем продукт пользователю */
+        /* ========================================= */
+
         await userRef.update({
-            trackedProducts: admin.firestore.FieldValue.arrayUnion(productId)
+
+            trackedProducts:
+                admin.firestore.FieldValue.arrayUnion(productId)
+
         });
 
-        res.json({ success: true, productId });
+        res.json({
 
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
+            success: true,
+            productId
+
+        });
+
     }
+
+    catch (e) {
+
+        console.error(e);
+
+        res.status(500).json({
+
+            success: false,
+            message: e.message
+
+        });
+
+    }
+
 });
 
 /* ========================================= */
@@ -855,48 +1004,100 @@ app.get("/getProductsByLinks", async (req, res) => {
 /* ========================================= */
 
 app.get("/deleteUserProduct", async (req, res) => {
+
     try {
 
-        const { userId, productId } = req.query;
+        const {
+            userId,
+            productId
+        } = req.query;
 
         if (!userId || !productId) {
-            return res.status(400).json({ error: "Missing params" });
+
+            return res.status(400).json({
+                success: false,
+                message: "Missing params"
+            });
+
         }
 
-        const userRef = db.collection("users").doc(userId);
-        const productRef = db.collection("products").doc(productId);
+        const userRef =
+            db.collection("users").doc(userId);
 
-        // удаляем у пользователя
+        const productRef =
+            db.collection("products").doc(productId);
+
+        /* ========================================= */
+        /* Удаляем товар у пользователя */
+        /* ========================================= */
+
         await userRef.update({
-            trackedProducts: admin.firestore.FieldValue.arrayRemove(productId)
+
+            trackedProducts:
+                admin.firestore.FieldValue.arrayRemove(productId)
+
         });
 
-        const productDoc = await productRef.get();
+        const productDoc =
+            await productRef.get();
 
-        if (productDoc.exists) {
+        if (!productDoc.exists) {
 
-            const currentCount = productDoc.data().userCount || 1;
+            return res.json({
+                success: true
+            });
 
-            if (currentCount <= 1) {
-
-                // никто не отслеживает → удаляем продукт
-                await productRef.delete();
-
-            } else {
-
-                await productRef.update({
-                    userCount: admin.firestore.FieldValue.increment(-1)
-                });
-
-            }
         }
 
-        res.json({ success: true });
+        const productData =
+            productDoc.data();
 
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
+        const currentCount =
+            productData.userCount || 1;
+
+        /* ========================================= */
+        /* Если никто не отслеживает */
+        /* ========================================= */
+
+        if (currentCount <= 1) {
+
+            await productRef.delete();
+
+        }
+
+        else {
+
+            await productRef.update({
+
+                userCount:
+                    admin.firestore.FieldValue.increment(-1),
+
+                trackedBy:
+                    admin.firestore.FieldValue.arrayRemove(userId)
+
+            });
+
+        }
+
+        res.json({
+            success: true
+        });
+
     }
+
+    catch (e) {
+
+        console.error(e);
+
+        res.status(500).json({
+
+            success: false,
+            message: e.message
+
+        });
+
+    }
+
 });
 
 
@@ -933,6 +1134,173 @@ app.get("/userProducts", async (req, res) => {
     }
 });
 
+/* ========================================= */
+/* AUTO UPDATE PRODUCTS */
+/* ========================================= */
+
+cron.schedule("*/15 * * * *", async () => {
+
+    console.log("AUTO UPDATE STARTED");
+
+    try {
+
+        const snapshot = await db
+            .collection("products")
+            .orderBy("lastUpdated", "asc")
+            .limit(5)
+            .get();
+
+        for (const doc of snapshot.docs) {
+
+            try {
+
+                const productId = doc.id;
+                const product = doc.data();
+
+                console.log("Updating:", product.title);
+
+                const updated =
+                    await parseProductByUrl(product.link);
+
+                if (!updated || !updated.price) {
+                    continue;
+                }
+
+                const oldPrice = Number(product.price);
+                const newPrice = Number(updated.price);
+
+                const history =
+                    product.priceHistory || [];
+
+                history.push({
+                    price: newPrice,
+                    date: new Date()
+                });
+
+                // максимум 10 записей
+                const trimmedHistory =
+                    history.slice(-10);
+
+                await db
+                    .collection("products")
+                    .doc(productId)
+                    .update({
+
+                        title:
+                        updated.title,
+
+                        price:
+                        newPrice,
+
+                        image:
+                        updated.image,
+
+                        lastUpdated:
+                            new Date(),
+
+                        priceHistory:
+                        trimmedHistory
+
+                    });
+
+                // если цена не снизилась
+                if (newPrice >= oldPrice) {
+                    continue;
+                }
+
+                // процент снижения
+                const dropPercent =
+                    ((oldPrice - newPrice) / oldPrice) * 100;
+
+                console.log(
+                    `DROP ${dropPercent.toFixed(1)}%`
+                );
+
+                // ищем пользователей
+                const usersSnapshot =
+                    await db.collection("users").get();
+
+                for (const userDoc of usersSnapshot.docs) {
+
+                    const user =
+                        userDoc.data();
+
+                    const tracked =
+                        user.trackedProducts || [];
+
+                    if (!tracked.includes(productId)) {
+                        continue;
+                    }
+
+                    const threshold =
+                        user.notificationSettings?.priceDropPercent ?? 5;
+
+                    if (dropPercent < threshold) {
+                        continue;
+                    }
+
+                    const tokens =
+                        user.fcmTokens || [];
+
+                    if (tokens.length === 0) {
+                        continue;
+                    }
+
+                    for (const token of tokens) {
+
+                        try {
+
+                            await messaging.send({
+
+                                token,
+
+                                notification: {
+
+                                    title:
+                                        "Цена снизилась",
+
+                                    body:
+                                        `${product.title}\n${oldPrice} BYN → ${newPrice} BYN`
+
+                                }
+
+                            });
+
+                            console.log(
+                                "Push sent"
+                            );
+
+                        } catch (e) {
+
+                            console.log(
+                                "Push error:",
+                                e.message
+                            );
+
+                        }
+                    }
+                }
+
+            } catch (e) {
+
+                console.log(
+                    "Product update failed:",
+                    e.message
+                );
+
+            }
+        }
+
+    } catch (e) {
+
+        console.log(
+            "CRON ERROR:",
+            e.message
+        );
+
+    }
+
+});
 
 
 /* ========================================= */
