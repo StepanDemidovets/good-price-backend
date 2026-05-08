@@ -57,6 +57,9 @@ db.settings({
 
 const app = express();
 
+const SCHEDULER_SECRET =
+    process.env.SCHEDULER_SECRET || "my_secret_key";
+
 app.use(cors());
 app.use(express.json());
 
@@ -1302,6 +1305,274 @@ cron.schedule("*/15 * * * *", async () => {
 
 });
 
+
+/* ========================================= */
+/* Scheduled auto update */
+/* ========================================= */
+
+app.get("/scheduledUpdate", async (req, res) => {
+
+    try {
+
+        const key =
+            req.query.key;
+
+        if (key !== SCHEDULER_SECRET) {
+
+            return res.status(403).json({
+                success: false,
+                message: "Forbidden"
+            });
+
+        }
+
+        console.log("SCHEDULED UPDATE START");
+
+        /* ========================================= */
+        /* Берём 5 самых старых товаров */
+        /* ========================================= */
+
+        const snapshot =
+            await db
+                .collection("products")
+                .orderBy("lastAutoUpdate", "asc")
+                .limit(5)
+                .get();
+
+        let updated =
+            0;
+
+        for (const doc of snapshot.docs) {
+
+            try {
+
+                const product =
+                    doc.data();
+
+                const oldPrice =
+                    Number(product.price);
+
+                const parsed =
+                    await parseProductByUrl(product.link);
+
+                if (
+                    !parsed ||
+                    !parsed.price
+                ) {
+
+                    console.log(
+                        "PARSE FAILED:",
+                        product.link
+                    );
+
+                    continue;
+
+                }
+
+                const newPrice =
+                    Number(parsed.price);
+
+                const now =
+                    new Date();
+
+                /* ========================================= */
+                /* История цен */
+                /* ========================================= */
+
+                let history =
+                    product.priceHistory || [];
+
+                history.push({
+
+                    price:
+                    newPrice,
+
+                    updatedAt:
+                    now
+
+                });
+
+                if (history.length > 10) {
+
+                    history =
+                        history.slice(-10);
+
+                }
+
+                /* ========================================= */
+                /* Обновляем продукт */
+                /* ========================================= */
+
+                await doc.ref.update({
+
+                    title:
+                    parsed.title,
+
+                    price:
+                    newPrice,
+
+                    image:
+                        parsed.image || null,
+
+                    lastUpdated:
+                    now,
+
+                    lastAutoUpdate:
+                    now,
+
+                    priceHistory:
+                    history
+
+                });
+
+                updated++;
+
+                console.log(
+                    "UPDATED:",
+                    parsed.title
+                );
+
+                /* ========================================= */
+                /* PUSH ONLY IF PRICE DROPPED */
+                /* ========================================= */
+
+                if (newPrice >= oldPrice) {
+
+                    continue;
+
+                }
+
+                const percentDrop =
+                    (
+                        (oldPrice - newPrice)
+                        / oldPrice
+                    ) * 100;
+
+                console.log(
+                    "PRICE DROP:",
+                    percentDrop
+                );
+
+                const trackedBy =
+                    product.trackedBy || [];
+
+                for (const userId of trackedBy) {
+
+                    try {
+
+                        const userDoc =
+                            await db
+                                .collection("users")
+                                .doc(userId)
+                                .get();
+
+                        if (!userDoc.exists) {
+                            continue;
+                        }
+
+                        const userData =
+                            userDoc.data();
+
+                        const settings =
+                            userData.notificationSettings || {};
+
+                        const enabled =
+                            settings.enabled ?? true;
+
+                        const threshold =
+                            settings.priceDropPercent ?? 5;
+
+                        if (!enabled) {
+                            continue;
+                        }
+
+                        if (percentDrop < threshold) {
+                            continue;
+                        }
+
+                        const tokens =
+                            userData.fcmTokens || [];
+
+                        if (tokens.length === 0) {
+                            continue;
+                        }
+
+                        const message = {
+
+                            notification: {
+
+                                title:
+                                    "Снижение цены",
+
+                                body:
+                                    `${parsed.title}\n${oldPrice} BYN → ${newPrice} BYN`
+
+                            },
+
+                            tokens
+
+                        };
+
+                        await messaging.sendEachForMulticast(message);
+
+                        console.log(
+                            "PUSH SENT:",
+                            userId
+                        );
+
+                    }
+
+                    catch (e) {
+
+                        console.log(
+                            "PUSH ERROR:",
+                            e.message
+                        );
+
+                    }
+
+                }
+
+            }
+
+            catch (e) {
+
+                console.log(
+                    "UPDATE ERROR:",
+                    e.message
+                );
+
+            }
+
+        }
+
+        console.log(
+            "SCHEDULED UPDATE FINISHED"
+        );
+
+        res.json({
+
+            success: true,
+            updated
+
+        });
+
+    }
+
+    catch (e) {
+
+        console.error(e);
+
+        res.status(500).json({
+
+            success: false,
+            message: e.message
+
+        });
+
+    }
+
+});
 
 /* ========================================= */
 
