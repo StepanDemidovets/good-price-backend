@@ -1144,169 +1144,169 @@ app.get("/userProducts", async (req, res) => {
 /* AUTO UPDATE PRODUCTS */
 /* ========================================= */
 
-cron.schedule("*/15 * * * *", async () => {
-
-    console.log("AUTO UPDATE STARTED");
-
-    try {
-
-        const snapshot = await db
-            .collection("products")
-            .orderBy("lastUpdated", "asc")
-            .limit(5)
-            .get();
-
-        for (const doc of snapshot.docs) {
-
-            try {
-
-                const productId = doc.id;
-                const product = doc.data();
-
-                console.log("Updating:", product.title);
-
-                const updated =
-                    await parseProductByUrl(product.link);
-
-                if (!updated || !updated.price) {
-                    continue;
-                }
-
-                const oldPrice = Number(product.price);
-                const newPrice = Number(updated.price);
-
-                const history =
-                    product.priceHistory || [];
-
-                history.push({
-                    price: newPrice,
-                    date: new Date()
-                });
-
-                // максимум 10 записей
-                const trimmedHistory =
-                    history.slice(-10);
-
-                await db
-                    .collection("products")
-                    .doc(productId)
-                    .update({
-
-                        title:
-                        updated.title,
-
-                        price:
-                        newPrice,
-
-                        image:
-                        updated.image,
-
-                        lastUpdated:
-                            new Date(),
-
-                        priceHistory:
-                        trimmedHistory
-
-                    });
-
-                // если цена не снизилась
-                if (newPrice >= oldPrice) {
-                    continue;
-                }
-
-                // процент снижения
-                const dropPercent =
-                    ((oldPrice - newPrice) / oldPrice) * 100;
-
-                console.log(
-                    `DROP ${dropPercent.toFixed(1)}%`
-                );
-
-                // ищем пользователей
-                const usersSnapshot =
-                    await db.collection("users").get();
-
-                for (const userDoc of usersSnapshot.docs) {
-
-                    const user =
-                        userDoc.data();
-
-                    const tracked =
-                        user.trackedProducts || [];
-
-                    if (!tracked.includes(productId)) {
-                        continue;
-                    }
-
-                    const threshold =
-                        user.notificationSettings?.priceDropPercent ?? 5;
-
-                    if (dropPercent < threshold) {
-                        continue;
-                    }
-
-                    const tokens =
-                        user.fcmTokens || [];
-
-                    if (tokens.length === 0) {
-                        continue;
-                    }
-
-                    for (const token of tokens) {
-
-                        try {
-
-                            await messaging.send({
-
-                                token,
-
-                                notification: {
-
-                                    title:
-                                        "Цена снизилась",
-
-                                    body:
-                                        `${product.title}\n${oldPrice} BYN → ${newPrice} BYN`
-
-                                }
-
-                            });
-
-                            console.log(
-                                "Push sent"
-                            );
-
-                        } catch (e) {
-
-                            console.log(
-                                "Push error:",
-                                e.message
-                            );
-
-                        }
-                    }
-                }
-
-            } catch (e) {
-
-                console.log(
-                    "Product update failed:",
-                    e.message
-                );
-
-            }
-        }
-
-    } catch (e) {
-
-        console.log(
-            "CRON ERROR:",
-            e.message
-        );
-
-    }
-
-});
+// cron.schedule("*/15 * * * *", async () => {
+//
+//     console.log("AUTO UPDATE STARTED");
+//
+//     try {
+//
+//         const snapshot = await db
+//             .collection("products")
+//             .orderBy("lastUpdated", "asc")
+//             .limit(5)
+//             .get();
+//
+//         for (const doc of snapshot.docs) {
+//
+//             try {
+//
+//                 const productId = doc.id;
+//                 const product = doc.data();
+//
+//                 console.log("Updating:", product.title);
+//
+//                 const updated =
+//                     await parseProductByUrl(product.link);
+//
+//                 if (!updated || !updated.price) {
+//                     continue;
+//                 }
+//
+//                 const oldPrice = Number(product.price);
+//                 const newPrice = Number(updated.price);
+//
+//                 const history =
+//                     product.priceHistory || [];
+//
+//                 history.push({
+//                     price: newPrice,
+//                     updatedAt: new Date()
+//                 });
+//
+//                 // максимум 10 записей
+//                 const trimmedHistory =
+//                     history.slice(-10);
+//
+//                 await db
+//                     .collection("products")
+//                     .doc(productId)
+//                     .update({
+//
+//                         title:
+//                         updated.title,
+//
+//                         price:
+//                         newPrice,
+//
+//                         image:
+//                         updated.image,
+//
+//                         lastUpdated:
+//                             new Date(),
+//
+//                         priceHistory:
+//                         trimmedHistory
+//
+//                     });
+//
+//                 // если цена не снизилась
+//                 if (newPrice >= oldPrice) {
+//                     continue;
+//                 }
+//
+//                 // процент снижения
+//                 const dropPercent =
+//                     ((oldPrice - newPrice) / oldPrice) * 100;
+//
+//                 console.log(
+//                     `DROP ${dropPercent.toFixed(1)}%`
+//                 );
+//
+//                 // ищем пользователей
+//                 const usersSnapshot =
+//                     await db.collection("users").get();
+//
+//                 for (const userDoc of usersSnapshot.docs) {
+//
+//                     const user =
+//                         userDoc.data();
+//
+//                     const tracked =
+//                         user.trackedProducts || [];
+//
+//                     if (!tracked.includes(productId)) {
+//                         continue;
+//                     }
+//
+//                     const threshold =
+//                         user.notificationSettings?.priceDropPercent ?? 5;
+//
+//                     if (dropPercent < threshold) {
+//                         continue;
+//                     }
+//
+//                     const tokens =
+//                         user.fcmTokens || [];
+//
+//                     if (tokens.length === 0) {
+//                         continue;
+//                     }
+//
+//                     for (const token of tokens) {
+//
+//                         try {
+//
+//                             await messaging.send({
+//
+//                                 token,
+//
+//                                 notification: {
+//
+//                                     title:
+//                                         "Цена снизилась",
+//
+//                                     body:
+//                                         `${product.title}\n${oldPrice} BYN → ${newPrice} BYN`
+//
+//                                 }
+//
+//                             });
+//
+//                             console.log(
+//                                 "Push sent"
+//                             );
+//
+//                         } catch (e) {
+//
+//                             console.log(
+//                                 "Push error:",
+//                                 e.message
+//                             );
+//
+//                         }
+//                     }
+//                 }
+//
+//             } catch (e) {
+//
+//                 console.log(
+//                     "Product update failed:",
+//                     e.message
+//                 );
+//
+//             }
+//         }
+//
+//     } catch (e) {
+//
+//         console.log(
+//             "CRON ERROR:",
+//             e.message
+//         );
+//
+//     }
+//
+// });
 
 
 /* ========================================= */
@@ -1440,9 +1440,11 @@ app.get("/scheduledUpdate", async (req, res) => {
                 /* ========================================= */
 
                 if (newPrice >= oldPrice) {
-
                     continue;
+                }
 
+                if (oldPrice <= 0) {
+                    continue;
                 }
 
                 const percentDrop =
@@ -1549,13 +1551,6 @@ app.get("/scheduledUpdate", async (req, res) => {
                             response.successCount,
                             response.failureCount
                         );
-
-                        console.log(
-                            "PUSH SENT:",
-                            userId
-                        );
-
-                        await messaging.sendEachForMulticast(message);
 
                         console.log(
                             "PUSH SENT:",
