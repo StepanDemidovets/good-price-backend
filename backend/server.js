@@ -1517,28 +1517,6 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                             },
 
-                            android: {
-
-                                priority: "high",
-
-                                notification: {
-
-                                    channelId:
-                                        "price_alerts",
-
-                                    sound:
-                                        "default",
-
-                                    defaultSound:
-                                        true,
-
-                                    defaultVibrateTimings:
-                                        true
-
-                                }
-
-                            },
-
                             tokens
 
                         };
