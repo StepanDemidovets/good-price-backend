@@ -414,6 +414,9 @@ app.post("/saveFcmToken", async (req, res) => {
             merge: true
         });
 
+        console.log("TOKEN SAVED:", userId);
+        console.log("TOKEN:", token);
+
         res.json({
             success: true
         });
