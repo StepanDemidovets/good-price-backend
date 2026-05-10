@@ -1502,19 +1502,58 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                         const message = {
 
-                            notification: {
+                            data: {
 
                                 title:
                                     "Снижение цены",
 
                                 body:
-                                    `${parsed.title}\n${oldPrice} BYN → ${newPrice} BYN`
+                                    `${parsed.title}\n${oldPrice} BYN → ${newPrice} BYN`,
+
+                                productId:
+                                doc.id
+
+                            },
+
+                            android: {
+
+                                priority: "high",
+
+                                notification: {
+
+                                    channelId:
+                                        "price_alerts",
+
+                                    sound:
+                                        "default",
+
+                                    defaultSound:
+                                        true,
+
+                                    defaultVibrateTimings:
+                                        true
+
+                                }
 
                             },
 
                             tokens
 
                         };
+
+                        const response =
+                            await messaging.sendEachForMulticast(message);
+
+                        console.log(
+                            "PUSH RESPONSE:",
+                            response.successCount,
+                            response.failureCount
+                        );
+
+                        console.log(
+                            "PUSH SENT:",
+                            userId
+                        );
 
                         await messaging.sendEachForMulticast(message);
 
