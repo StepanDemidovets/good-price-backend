@@ -1360,12 +1360,16 @@ app.get("/scheduledUpdate", async (req, res) => {
                 const oldPrice =
                     Number(product.price);
 
+                if (isNaN(oldPrice)) {
+                    continue;
+                }
+
                 const parsed =
                     await parseProductByUrl(product.link);
 
                 if (
                     !parsed ||
-                    !parsed.price
+                    parsed.price == null
                 ) {
 
                     console.log(
@@ -1379,6 +1383,10 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                 const newPrice =
                     Number(parsed.price);
+
+                if (isNaN(newPrice)) {
+                    continue;
+                }
 
                 const now =
                     new Date();
@@ -1460,7 +1468,7 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                 console.log(
                     "PRICE DROP:",
-                    percentDrop
+                    percentDrop.toFixed(2) + "%"
                 );
 
                 const trackedBy =
@@ -1503,7 +1511,14 @@ app.get("/scheduledUpdate", async (req, res) => {
                         const tokens =
                             userData.fcmTokens || [];
 
-                        if (tokens.length === 0) {
+                        const validTokens =
+                            tokens.filter(
+                                token =>
+                                    typeof token === "string" &&
+                                    token.trim() !== ""
+                            );
+
+                        if (validTokens.length === 0) {
                             continue;
                         }
 
@@ -1522,10 +1537,22 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                             },
 
-                            tokens
+                            android: {
+
+                                priority: "high",
+
+                                notification: {
+
+                                    channelId:
+                                        "price_alerts"
+
+                                }
+
+                            },
+
+                            tokens: validTokens
 
                         };
-
                         const response =
                             await messaging.sendEachForMulticast(message);
 
@@ -1535,11 +1562,63 @@ app.get("/scheduledUpdate", async (req, res) => {
                             response.failureCount
                         );
 
-                        console.log(
-                            "PUSH SENT:",
-                            userId
-                        );
+                        for (let index = 0; index < response.responses.length; index++) {
 
+                            const resp =
+                                response.responses[index];
+
+                            if (resp.success) {
+
+                                console.log(
+                                    "PUSH SUCCESS:",
+                                    validTokens[index]
+                                );
+
+                            }
+
+                            else {
+
+                                console.log(
+                                    "PUSH FAILED:",
+                                    validTokens[index]
+                                );
+
+                                console.log(
+                                    "ERROR:",
+                                    resp.error?.message
+                                );
+
+                                console.log(
+                                    "ERROR CODE:",
+                                    resp.error?.code
+                                );
+
+                                if (
+                                    resp.error?.code ===
+                                    "messaging/registration-token-not-registered"
+                                ) {
+
+                                    await db
+                                        .collection("users")
+                                        .doc(userId)
+                                        .update({
+
+                                            fcmTokens:
+                                                admin.firestore.FieldValue.arrayRemove(
+                                                    validTokens[index]
+                                                )
+
+                                        });
+
+                                    console.log(
+                                        "REMOVED INVALID TOKEN"
+                                    );
+
+                                }
+
+                            }
+
+                        }
                     }
 
                     catch (e) {
