@@ -1315,6 +1315,11 @@ app.get("/userProducts", async (req, res) => {
 
 app.get("/scheduledUpdate", async (req, res) => {
 
+    console.log(
+        "CRON JOB TRIGGER:",
+        new Date().toISOString()
+    );
+
     try {
 
         const key =
