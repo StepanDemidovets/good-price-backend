@@ -117,6 +117,16 @@ app.get("/", (req, res) => {
     res.send("Backend is running");
 });
 
+app.get("/ping", (req, res) => {
+
+    console.log(
+        "PING:",
+        new Date().toISOString()
+    );
+
+    res.status(200).send("OK");
+
+});
 /* ========================================= */
 /* Добавить товар */
 /* ========================================= */
@@ -1672,6 +1682,7 @@ app.get("/scheduledUpdate", async (req, res) => {
     }
 
 });
+
 
 /* ========================================= */
 
