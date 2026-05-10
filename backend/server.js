@@ -1547,19 +1547,6 @@ app.get("/scheduledUpdate", async (req, res) => {
 
                             },
 
-                            android: {
-
-                                priority: "high",
-
-                                notification: {
-
-                                    channelId:
-                                        "price_alerts"
-
-                                }
-
-                            },
-
                             tokens: validTokens
 
                         };
