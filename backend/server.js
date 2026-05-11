@@ -249,7 +249,7 @@ app.get("/manualScraper", async (req, res) => {
 
             if (
                 !parsed ||
-                !parsed.price
+                parsed.price == null
             ) {
 
                 return res.status(400).json({
@@ -1664,6 +1664,51 @@ app.get("/scheduledUpdate", async (req, res) => {
             success: false,
             message: e.message
 
+        });
+
+    }
+
+});
+
+
+app.post("/removeFcmToken", async (req, res) => {
+
+    try {
+
+        const {
+            userId,
+            token
+        } = req.body;
+
+        if (!userId || !token) {
+
+            return res.status(400).json({
+                success: false
+            });
+
+        }
+
+        await db
+            .collection("users")
+            .doc(userId)
+            .update({
+
+                fcmTokens:
+                    admin.firestore.FieldValue.arrayRemove(token)
+
+            });
+
+        res.json({
+            success: true
+        });
+
+    }
+
+    catch (e) {
+
+        res.status(500).json({
+            success: false,
+            message: e.message
         });
 
     }
